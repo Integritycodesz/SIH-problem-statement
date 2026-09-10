@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bell, ChevronDown, Check, ShieldCheck, 
-  User as UserIcon, Zap
+  User as UserIcon, Zap, CheckCheck
 } from 'lucide-react';
-import type { User } from '../services/api';
+import { api, type User, type AgriNotification } from '../services/api';
 import { isSupabaseConfigured } from '../services/supabase';
+import { translations, type Language } from '../utils/i18n';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -12,6 +13,8 @@ interface HeaderProps {
   onSelectUser: (user: User) => void;
   activeTab: string;
   onSelectTab: (tab: string) => void;
+  lang: Language;
+  onSelectLang: (lang: Language) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,10 +23,47 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectUser,
   activeTab,
   onSelectTab,
+  lang,
+  onSelectLang,
 }) => {
-  const [lang, setLang] = useState<'EN' | 'MR'>('EN');
   const [showRoleDropdown, setShowRoleDropdown] = useState<boolean>(false);
+  const [showNotifDrawer, setShowNotifDrawer] = useState<boolean>(false);
+  const [notifications, setNotifications] = useState<AgriNotification[]>([]);
   const supabaseActive = isSupabaseConfigured();
+  const t = translations[lang];
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const list = await api.getNotifications();
+      setNotifications([...list]);
+    } catch (err) {
+      console.warn('Error loading notifications:', err);
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotificationClick = async (notif: AgriNotification) => {
+    await api.markNotificationAsRead(notif.id);
+    loadNotifications();
+    if (notif.linkTab) {
+      onSelectTab(notif.linkTab);
+      setShowNotifDrawer(false);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    for (const n of notifications) {
+      await api.markNotificationAsRead(n.id);
+    }
+    loadNotifications();
+  };
 
   return (
     <div style={{ backgroundColor: '#ffffff', borderBottom: '1px solid var(--border-card)' }}>
@@ -48,21 +88,24 @@ export const Header: React.FC<HeaderProps> = ({
             color: '#34d399' 
           }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }} />
-            LIVE APMC
+            {t.liveApmc}
           </span>
           <span style={{ color: '#d1fae5' }}>
-            Lasalgaon Onion: <strong>₹2,450/qtl</strong> • Pune Soybean: <strong>₹4,820/qtl</strong> • Nashik Tomato: <strong>₹1,850/qtl</strong> • Nagpur Cotton: <strong>₹7,120/qtl</strong>
+            {lang === 'MR' 
+              ? 'लासलगाव कांदा: ₹२,४५०/क्विंटल • पुणे सोयाबीन: ₹४,८२०/क्विंटल • नाशिक टोमॅटो: ₹१,८५०/क्विंटल • नागपूर कापूस: ₹७,१२०/क्विंटल'
+              : 'Lasalgaon Onion: ₹2,450/qtl • Pune Soybean: ₹4,820/qtl • Nashik Tomato: ₹1,850/qtl • Nagpur Cotton: ₹7,120/qtl'
+            }
           </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#a7f3d0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <ShieldCheck size={14} />
-            <span>MSP Benchmark Active & Protected</span>
+            <span>{t.mspProtected}</span>
           </div>
 
           <div 
-            title={supabaseActive ? "Supabase Cloud PostgreSQL & Realtime Connected" : "Supabase Adapter Ready. Provide VITE_SUPABASE_URL in .env to activate Cloud Realtime"}
+            title={supabaseActive ? "Supabase Cloud PostgreSQL & Realtime Connected" : "Supabase Adapter Ready. Running Reactive In-Memory Engine"}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -103,7 +146,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-                AgroConnect
+                {t.appTitle}
               </span>
               <span style={{ 
                 backgroundColor: '#ecfdf5', 
@@ -118,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              Govt. of Maharashtra Agri-Tech Hub
+              {t.hubSubtitle}
             </div>
           </div>
         </div>
@@ -136,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({
               color: activeTab === 'intelligence' ? '#ffffff' : '#334155'
             }}
           >
-            Mandi Prices
+            {t.mandiPricesTab}
           </button>
 
           <button
@@ -154,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
             }}
           >
             {activeTab === 'farmer' && <Check size={14} />}
-            Farmer Produce
+            {t.farmerProduceTab}
           </button>
 
           <button
@@ -168,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
               color: activeTab === 'buyer' ? '#ffffff' : '#334155'
             }}
           >
-            Marketplace
+            {t.marketplaceTab}
           </button>
 
           <button
@@ -182,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({
               color: activeTab === 'contracts' ? '#ffffff' : '#334155'
             }}
           >
-            Escrow & Contracts
+            {t.escrowContractsTab}
           </button>
 
           <button
@@ -196,11 +239,11 @@ export const Header: React.FC<HeaderProps> = ({
               color: activeTab === 'disputes' ? '#ffffff' : '#334155'
             }}
           >
-            Help & Disputes
+            {t.disputesTab}
           </button>
         </div>
 
-        {/* Right Controls: Language, Bell & User Profile Switcher */}
+        {/* Right Controls: Language, Interactive Notification Bell & User Profile Switcher */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {/* Language Toggle */}
           <div style={{ 
@@ -212,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
             fontWeight: 600
           }}>
             <button
-              onClick={() => setLang('EN')}
+              onClick={() => onSelectLang('EN')}
               style={{
                 padding: '4px 8px',
                 backgroundColor: lang === 'EN' ? '#065f46' : '#ffffff',
@@ -222,7 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
               English
             </button>
             <button
-              onClick={() => setLang('MR')}
+              onClick={() => onSelectLang('MR')}
               style={{
                 padding: '4px 8px',
                 backgroundColor: lang === 'MR' ? '#065f46' : '#ffffff',
@@ -233,26 +276,127 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Notification Bell */}
-          <div style={{ position: 'relative', cursor: 'pointer' }}>
-            <Bell size={18} color="#64748b" />
-            <span style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              backgroundColor: '#f59e0b',
-              color: '#ffffff',
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              width: '14px',
-              height: '14px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              3
-            </span>
+          {/* Interactive Notification Bell */}
+          <div style={{ position: 'relative' }}>
+            <div 
+              onClick={() => setShowNotifDrawer(!showNotifDrawer)}
+              style={{ position: 'relative', cursor: 'pointer', padding: '4px' }}
+              title="Live Agri Notifications"
+            >
+              <Bell size={18} color="#64748b" />
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '0px',
+                  right: '0px',
+                  backgroundColor: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  width: '15px',
+                  height: '15px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+
+            {/* Notification Dropdown Drawer */}
+            {showNotifDrawer && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '8px',
+                width: '320px',
+                maxHeight: '400px',
+                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-card)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: 'var(--shadow-lg)',
+                zIndex: 60,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
+              }}>
+                <div style={{ 
+                  padding: '10px 14px', 
+                  borderBottom: '1px solid #f1f5f9', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  backgroundColor: '#f8fafc'
+                }}>
+                  <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                    {t.notificationsTitle}
+                  </strong>
+                  {unreadCount > 0 && (
+                    <button 
+                      onClick={handleMarkAllRead}
+                      style={{ 
+                        background: 'transparent', 
+                        fontSize: '0.7rem', 
+                        color: '#059669', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '3px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <CheckCheck size={12} /> Mark all read
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ overflowY: 'auto', maxHeight: '320px', display: 'flex', flexDirection: 'column' }}>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      {t.noNotifications}
+                    </div>
+                  ) : (
+                    notifications.map(n => (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        style={{
+                          padding: '10px 14px',
+                          borderBottom: '1px solid #f8fafc',
+                          cursor: 'pointer',
+                          backgroundColor: n.read ? '#ffffff' : '#f0fdf4',
+                          transition: 'background-color 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                          <span style={{ 
+                            fontSize: '0.65rem', 
+                            fontWeight: 700, 
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            backgroundColor: n.type === 'ESCROW' ? '#ecfdf5' : n.type === 'PRICE' ? '#fffbeb' : n.type === 'DISPUTE' ? '#fef2f2' : '#eff6ff',
+                            color: n.type === 'ESCROW' ? '#065f46' : n.type === 'PRICE' ? '#b45309' : n.type === 'DISPUTE' ? '#dc2626' : '#1d4ed8'
+                          }}>
+                            {n.type}
+                          </span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            {n.timestamp}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: n.read ? 600 : 700, color: '#0f172a' }}>
+                          {n.title}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '2px' }}>
+                          {n.message}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* User Profile Pill & Switcher */}
@@ -277,10 +421,15 @@ export const Header: React.FC<HeaderProps> = ({
               />
               <div style={{ textAlign: 'left', lineHeight: 1.1 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
-                  {currentUser?.name || 'Rameshwar Patil'}
+                  {currentUser?.name || 'Ramesh Patil'}
                 </div>
                 <div style={{ fontSize: '0.65rem', color: '#059669', fontWeight: 600 }}>
-                  {currentUser?.role === 'BUYER' ? 'Corporate Buyer' : currentUser?.role === 'OFFICIAL' ? 'APMC Official' : 'FPO Delegate • Nashik'}
+                  {currentUser?.role === 'BUYER' 
+                    ? (lang === 'MR' ? 'संस्थात्मक खरेदीदार' : 'Corporate Buyer')
+                    : currentUser?.role === 'OFFICIAL' 
+                    ? (lang === 'MR' ? 'बाजार समिती लवाद अधिकारी' : 'APMC Official Arbiter')
+                    : (lang === 'MR' ? 'शेतकरी प्रतिनिधी • नाशिक' : 'FPO Delegate • Nashik')
+                  }
                 </div>
               </div>
               <ChevronDown size={14} color="#64748b" />
@@ -293,7 +442,7 @@ export const Header: React.FC<HeaderProps> = ({
                 top: '100%',
                 right: 0,
                 marginTop: '6px',
-                width: '240px',
+                width: '260px',
                 backgroundColor: '#ffffff',
                 border: '1px solid var(--border-card)',
                 borderRadius: 'var(--radius-md)',
@@ -302,7 +451,7 @@ export const Header: React.FC<HeaderProps> = ({
                 zIndex: 50
               }}>
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', padding: '6px 8px', textTransform: 'uppercase' }}>
-                  Switch SIH Persona:
+                  {t.switchPersona}
                 </div>
                 {allUsers.map((u) => (
                   <div
@@ -336,3 +485,5 @@ export const Header: React.FC<HeaderProps> = ({
     </div>
   );
 };
+
+export default Header;

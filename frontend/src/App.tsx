@@ -6,12 +6,15 @@ import { BuyerDiscovery } from './components/BuyerDiscovery';
 import { EscrowContractHub } from './components/EscrowContractHub';
 import { DisputePortal } from './components/DisputePortal';
 import { api, type User } from './services/api';
+import { type Language } from './utils/i18n';
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('buyer'); // Default to Marketplace as in Image 1
+  const [activeTab, setActiveTab] = useState<string>('buyer'); // Default to Marketplace
+  const [lang, setLang] = useState<Language>('EN');
   const [disputeTargetContractId, setDisputeTargetContractId] = useState<number | null>(null);
+  const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -46,46 +49,62 @@ export const App: React.FC = () => {
     setActiveTab('disputes');
   };
 
+  const handleNavigateToContracts = (contractId?: number) => {
+    if (contractId) {
+      setSelectedContractId(contractId);
+    }
+    setActiveTab('contracts');
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
-      {/* Exact Reference Header with Ticker & Navigation */}
+      {/* Exact Reference Header with Ticker, Navigation & Interactive Notification Center */}
       <Header
         currentUser={currentUser}
         allUsers={allUsers}
         onSelectUser={handleUserSelect}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        lang={lang}
+        onSelectLang={setLang}
       />
 
       <main className="app-container" style={{ flex: 1 }}>
-        {activeTab === 'intelligence' && <MandiIntelligence />}
+        {activeTab === 'intelligence' && (
+          <MandiIntelligence lang={lang} />
+        )}
         {activeTab === 'farmer' && (
           <FarmerPortal 
             currentUser={currentUser} 
             onNavigateToRFQs={() => setActiveTab('buyer')} 
+            lang={lang}
           />
         )}
         {activeTab === 'buyer' && (
           <BuyerDiscovery 
             currentUser={currentUser} 
-            onNavigateToContracts={() => setActiveTab('contracts')} 
+            onNavigateToContracts={handleNavigateToContracts} 
+            lang={lang}
           />
         )}
         {activeTab === 'contracts' && (
           <EscrowContractHub 
             currentUser={currentUser} 
             onNavigateToDisputes={handleNavigateToDisputes} 
+            initialContractId={selectedContractId}
+            lang={lang}
           />
         )}
         {activeTab === 'disputes' && (
           <DisputePortal 
             currentUser={currentUser} 
             initialContractId={disputeTargetContractId} 
+            lang={lang}
           />
         )}
       </main>
 
-      {/* Exact Reference Footer */}
+      {/* Footer */}
       <footer style={{ 
         borderTop: '1px solid var(--border-card)', 
         backgroundColor: '#ffffff',
@@ -104,13 +123,18 @@ export const App: React.FC = () => {
             {/* Left */}
             <div style={{ maxWidth: '420px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>AgroConnect Portal</strong>
+                <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>
+                  {lang === 'MR' ? 'ॲग्रो-कनेक्ट पोर्टल' : 'AgroConnect Portal'}
+                </strong>
                 <span style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontWeight: 600 }}>
-                  Maharashtra State
+                  {lang === 'MR' ? 'महाराष्ट्र शासन' : 'Maharashtra State'}
                 </span>
               </div>
               <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Direct APMC-grade produce linkage, digital escrow settlement, and verified farmer producer aggregation platform.
+                {lang === 'MR' 
+                  ? 'थेट APMC-प्रमाणित शेतमाल जोडणी, डिजिटल एस्क्रो वाटप आणि पडताळणी केलेली शेतकरी उत्पादक कंपनी एकत्रीकरण व्यासपीठ.'
+                  : 'Direct APMC-grade produce linkage, digital escrow settlement, and verified farmer producer aggregation platform.'
+                }
               </p>
             </div>
 
@@ -118,7 +142,7 @@ export const App: React.FC = () => {
             <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Toll-Free Kisan Helpline
+                  {lang === 'MR' ? 'टोल-फ्री किसान हेल्पलाईन' : 'Toll-Free Kisan Helpline'}
                 </div>
                 <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#059669' }}>
                   1800-233-AGRO (2476)
@@ -127,7 +151,7 @@ export const App: React.FC = () => {
 
               <div>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Support Desk
+                  {lang === 'MR' ? 'सहाय्यता कक्ष' : 'Support Desk'}
                 </div>
                 <div style={{ fontSize: '0.85rem', color: '#475569' }}>
                   support-agroconnect@maharashtra.gov.in
@@ -149,14 +173,14 @@ export const App: React.FC = () => {
             color: 'var(--text-muted)'
           }}>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <span style={{ cursor: 'pointer' }}>Grievance Cell</span>
-              <span style={{ cursor: 'pointer' }}>MSP Benchmark Index</span>
-              <span style={{ cursor: 'pointer' }}>Digital Escrow Rules</span>
-              <span style={{ cursor: 'pointer' }}>Privacy Policy</span>
+              <span style={{ cursor: 'pointer' }}>{lang === 'MR' ? 'तक्रार निवारण सेल' : 'Grievance Cell'}</span>
+              <span style={{ cursor: 'pointer' }}>{lang === 'MR' ? 'किमान हमीभाव निर्देशांक' : 'MSP Benchmark Index'}</span>
+              <span style={{ cursor: 'pointer' }}>{lang === 'MR' ? 'डिजिटल एस्क्रो नियम' : 'Digital Escrow Rules'}</span>
+              <span style={{ cursor: 'pointer' }}>{lang === 'MR' ? 'गोपनीयता धोरण' : 'Privacy Policy'}</span>
             </div>
 
             <div>
-              © 2025 Government of Maharashtra & MSIS. All rights reserved.
+              © 2026 Government of Maharashtra & MSIS. All rights reserved.
             </div>
           </div>
         </div>

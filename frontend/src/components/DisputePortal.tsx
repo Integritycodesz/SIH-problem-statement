@@ -1,23 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { 
   AlertTriangle, CheckCircle2, 
-  Camera, UserCheck, X, ShieldCheck
+  Camera, UserCheck, X, ShieldCheck, ArrowUpRight
 } from 'lucide-react';
 import { api, type User, type Dispute, type Contract } from '../services/api';
+import { translations, type Language } from '../utils/i18n';
 
 interface DisputePortalProps {
   currentUser: User | null;
   initialContractId?: number | null;
+  lang?: Language;
 }
 
 export const DisputePortal: React.FC<DisputePortalProps> = ({ 
   currentUser, 
-  initialContractId 
+  initialContractId,
+  lang = 'EN'
 }) => {
+  const t = translations[lang] || translations.EN;
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
   const [showFileModal, setShowFileModal] = useState<boolean>(false);
+  const [isEscalating, setIsEscalating] = useState<boolean>(false);
 
   // File Dispute Form
   const [disputeContractId, setDisputeContractId] = useState<number>(initialContractId || 1);
@@ -40,6 +45,13 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
     loadDisputes();
   }, [currentUser]);
 
+  useEffect(() => {
+    if (initialContractId) {
+      setDisputeContractId(initialContractId);
+      setShowFileModal(true);
+    }
+  }, [initialContractId]);
+
   const loadDisputes = async () => {
     try {
       const [allDisputes, allContracts] = await Promise.all([
@@ -48,8 +60,20 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
       ]);
       setDisputes(allDisputes);
       setContracts(allContracts);
-      if (allDisputes.length > 0 && !selectedDispute) {
-        setSelectedDispute(allDisputes[0]);
+      if (allDisputes.length > 0) {
+        if (initialContractId) {
+          const match = allDisputes.find(d => d.contract_id === initialContractId);
+          if (match) {
+            setSelectedDispute(match);
+            return;
+          }
+        }
+        if (!selectedDispute) {
+          setSelectedDispute(allDisputes[0]);
+        } else {
+          const updated = allDisputes.find(d => d.id === selectedDispute.id);
+          if (updated) setSelectedDispute(updated);
+        }
       }
     } catch (e) {
       console.error('Error loading disputes:', e);
@@ -77,6 +101,24 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
     }
   };
 
+  const handleEscalate = async (targetTier: string) => {
+    if (!selectedDispute) return;
+    setIsEscalating(true);
+    try {
+      const updated = await api.escalateDispute(
+        selectedDispute.id, 
+        targetTier, 
+        `Grievance escalated to ${targetTier.replace(/_/g, ' ')} due to lack of peer conciliation.`
+      );
+      setSelectedDispute(updated);
+      await loadDisputes();
+    } catch (e) {
+      console.error('Error escalating dispute:', e);
+    } finally {
+      setIsEscalating(false);
+    }
+  };
+
   const handleResolve = async (tier: string) => {
     if (!selectedDispute) return;
     try {
@@ -88,7 +130,6 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
       });
       setSelectedDispute(resolved);
       await loadDisputes();
-      alert('Dispute resolved! Escrow payout adjusted and released.');
     } catch (err) {
       console.error('Error resolving dispute:', err);
     }
@@ -112,20 +153,20 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
             fontWeight: 700,
             marginBottom: '6px'
           }}>
-            <ShieldCheck size={13} /> 3-Tier Statutory Arbitration Framework
+            <ShieldCheck size={13} /> {lang === 'MR' ? '३-स्तरीय वैधानिक लवाद व तक्रार निवारण कक्ष' : '3-Tier Statutory Arbitration Framework'}
           </div>
-          <h2 style={{ fontSize: '1.65rem', color: '#0f172a' }}>Grievance & 3-Tier Dispute Resolution</h2>
+          <h2 style={{ fontSize: '1.65rem', color: '#0f172a' }}>{t.disputeTitle}</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Peer Negotiation → APMC Mandi Official Arbitration → State Marketing Board Appellate Panel.
+            {t.disputeSubtitle}
           </p>
         </div>
 
         <button 
           className="btn-gov-secondary"
           onClick={() => setShowFileModal(true)}
-          style={{ borderColor: '#fca5a5', color: '#dc2626', backgroundColor: '#fef2f2' }}
+          style={{ borderColor: '#fca5a5', color: '#dc2626', backgroundColor: '#fef2f2', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <AlertTriangle size={15} /> File Formal Grievance
+          <AlertTriangle size={15} /> {t.fileGrievanceBtn}
         </button>
       </div>
 
@@ -134,7 +175,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
         {/* Left: Disputes List */}
         <div className="gov-card" style={{ padding: '20px' }}>
           <h4 style={{ fontSize: '1.05rem', color: '#0f172a', marginBottom: '14px' }}>
-            Active Grievance Tickets ({disputes.length})
+            {t.activeGrievanceTickets} ({disputes.length})
           </h4>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -159,11 +200,11 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
                 </div>
 
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Contract #{d.contract_id} • Filed by: <strong>{d.filed_by_name} ({d.filed_by_role})</strong>
+                  Contract #{d.contract_id} • {lang === 'MR' ? 'अर्जदार:' : 'Filed by:'} <strong>{d.filed_by_name} ({d.filed_by_role})</strong>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Claimed Deduction:</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t.claimedDeduction}:</span>
                   <strong style={{ fontSize: '0.92rem', color: '#dc2626' }}>
                     ₹{d.claimed_deduction.toLocaleString()}
                   </strong>
@@ -182,7 +223,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
                   Ticket #{selectedDispute.id} — {selectedDispute.dispute_type.replace(/_/g, ' ')}
                 </h4>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Contract #{selectedDispute.contract_id} • Filed on {new Date(selectedDispute.created_at).toLocaleDateString()}
+                  Contract #{selectedDispute.contract_id} • {new Date(selectedDispute.created_at).toLocaleDateString()}
                 </div>
               </div>
               <span className={`badge ${selectedDispute.status === 'RESOLVED' ? 'badge-grade-a' : 'badge-amber-tag'}`}>
@@ -193,36 +234,44 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
             {/* 3-Tier Resolution Progression */}
             <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-card)' }}>
               <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                Statutory Resolution Hierarchy
+                {lang === 'MR' ? 'वैधानिक लवाद स्तर (Statutory Hierarchy)' : 'Statutory Resolution Hierarchy'}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
                 <div style={{ padding: '8px', backgroundColor: selectedDispute.tier === 'TIER_1_PEER' ? '#fef3c7' : '#ffffff', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-card)' }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>Tier 1: Peer</div>
-                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Direct Settlement</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.tier1Peer}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>
+                    {lang === 'MR' ? 'थेट द्विपक्षीय चर्चा' : 'Direct Settlement'}
+                  </div>
                 </div>
 
                 <div style={{ padding: '8px', backgroundColor: selectedDispute.tier === 'TIER_2_ARBITRATION' ? '#fef3c7' : '#ffffff', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-card)' }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>Tier 2: APMC</div>
-                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Mandi Arbiter</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.tier2Apmc}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>
+                    {lang === 'MR' ? 'बाजार समिती सचिव लवाद' : 'Mandi Arbiter'}
+                  </div>
                 </div>
 
                 <div style={{ padding: '8px', backgroundColor: selectedDispute.tier === 'TIER_3_PANEL' ? '#fef3c7' : '#ffffff', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-card)' }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>Tier 3: State</div>
-                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>MSAMB Panel</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.tier3State}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>
+                    {lang === 'MR' ? 'MSAMB राज्यस्तरीय पॅनेल' : 'MSAMB Panel'}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Complaint details */}
             <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-card)' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Grievance Statement:</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                {lang === 'MR' ? 'तक्रारदार निवेदन (Grievance Statement):' : 'Grievance Statement:'}
+              </div>
               <p style={{ fontSize: '0.86rem', color: '#0f172a' }}>{selectedDispute.complaint_details}</p>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.8rem', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
-                <span>Claimed Deduction: <strong style={{ color: '#dc2626' }}>₹{selectedDispute.claimed_deduction}</strong></span>
+                <span>{t.claimedDeduction}: <strong style={{ color: '#dc2626' }}>₹{selectedDispute.claimed_deduction}</strong></span>
                 {selectedDispute.resolved_at && (
-                  <span>Agreed Settlement: <strong style={{ color: '#059669' }}>₹{selectedDispute.agreed_adjustment}</strong></span>
+                  <span>{t.agreedSettlement}: <strong style={{ color: '#059669' }}>₹{selectedDispute.agreed_adjustment}</strong></span>
                 )}
               </div>
             </div>
@@ -231,7 +280,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
             {selectedDispute.evidence_urls && (
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Camera size={13} /> Submitted Inspection Evidence:
+                  <Camera size={13} /> {lang === 'MR' ? 'दाखल केलेला तपासणी पुरावा:' : 'Submitted Inspection Evidence:'}
                 </div>
                 <img 
                   src={selectedDispute.evidence_urls} 
@@ -241,20 +290,51 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
               </div>
             )}
 
+            {/* Tier Escalation Controls if not yet resolved */}
+            {selectedDispute.status !== 'RESOLVED' && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-card)' }}>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  {lang === 'MR' ? 'लवाद स्तर बदलणे:' : 'Escalation Action:'}
+                </span>
+
+                {selectedDispute.tier === 'TIER_1_PEER' && (
+                  <button 
+                    className="btn-gov-secondary"
+                    disabled={isEscalating}
+                    onClick={() => handleEscalate('TIER_2_ARBITRATION')}
+                    style={{ fontSize: '0.75rem', padding: '4px 10px', color: '#d97706', borderColor: '#fde68a' }}
+                  >
+                    <ArrowUpRight size={13} /> {t.escalateToTier2Btn}
+                  </button>
+                )}
+
+                {(selectedDispute.tier === 'TIER_1_PEER' || selectedDispute.tier === 'TIER_2_ARBITRATION') && (
+                  <button 
+                    className="btn-gov-secondary"
+                    disabled={isEscalating}
+                    onClick={() => handleEscalate('TIER_3_PANEL')}
+                    style={{ fontSize: '0.75rem', padding: '4px 10px', color: '#dc2626', borderColor: '#fca5a5' }}
+                  >
+                    <ArrowUpRight size={13} /> {t.escalateToTier3Btn}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Official Arbitration Ruling Panel */}
             {selectedDispute.status !== 'RESOLVED' ? (
               <div style={{ backgroundColor: '#f0fdf4', padding: '16px', borderRadius: 'var(--radius-sm)', border: '1px solid #bbf7d0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
                   <UserCheck size={16} color="#059669" />
                   <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#065f46' }}>
-                    APMC Official Arbiter Ruling Workbench:
+                    {lang === 'MR' ? 'बाजार समिती अधिकृत लवाद निर्णय कक्ष:' : 'APMC Official Arbiter Ruling Workbench:'}
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div>
                     <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '3px', display: 'block' }}>
-                      Agreed Deduction / Price Adjustment (₹)
+                      {lang === 'MR' ? 'मंजूर वजावट / मूल्य समायोजन (₹)' : 'Agreed Deduction / Price Adjustment (₹)'}
                     </label>
                     <input 
                       type="number" 
@@ -265,7 +345,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
                   <div>
                     <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '3px', display: 'block' }}>
-                      Official Arbiter Ruling & Instructions
+                      {lang === 'MR' ? 'अधिकृत लवाद निकाल व आदेश' : 'Official Arbiter Ruling & Instructions'}
                     </label>
                     <textarea 
                       rows={2} 
@@ -276,27 +356,27 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
                   <button 
                     className="btn-gov-primary" 
-                    onClick={() => handleResolve('TIER_2_ARBITRATION')}
+                    onClick={() => handleResolve(selectedDispute.tier)}
                     style={{ justifyContent: 'center', fontSize: '0.82rem', padding: '8px' }}
                   >
-                    Issue APMC Arbitrated Settlement
+                    {t.issueRulingBtn}
                   </button>
                 </div>
               </div>
             ) : (
               <div style={{ padding: '14px', backgroundColor: '#ecfdf5', borderRadius: 'var(--radius-sm)', border: '1px solid #a7f3d0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#065f46', fontWeight: 700, marginBottom: '4px', fontSize: '0.86rem' }}>
-                  <CheckCircle2 size={16} /> Grievance Officially Resolved
+                  <CheckCircle2 size={16} /> {lang === 'MR' ? 'तक्रार अधिकृतरीत्या निकाली काढली' : 'Grievance Officially Resolved'}
                 </div>
                 <p style={{ fontSize: '0.78rem', color: '#065f46' }}>
-                  Ruling: {selectedDispute.arbiter_ruling}
+                  <strong>{lang === 'MR' ? 'निकाल:' : 'Ruling:'}</strong> {selectedDispute.arbiter_ruling}
                 </p>
               </div>
             )}
           </div>
         ) : (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Select a dispute ticket on the left.
+            {lang === 'MR' ? 'कृपया डावीकडील तक्रार तिकीट निवडा.' : 'Select a dispute ticket on the left.'}
           </div>
         )}
       </div>
@@ -306,7 +386,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
         <div className="modal-overlay">
           <div className="modal-content">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '1.2rem', color: '#0f172a' }}>File Formal APMC Dispute</h3>
+              <h3 style={{ fontSize: '1.2rem', color: '#0f172a' }}>{t.fileGrievanceBtn}</h3>
               <button onClick={() => setShowFileModal(false)} style={{ background: 'transparent', color: '#64748b' }}>
                 <X size={20} />
               </button>
@@ -315,7 +395,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
             <form onSubmit={handleFileDisputeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Select Contract
+                  {lang === 'MR' ? 'करार निवडा' : 'Select Contract'}
                 </label>
                 <select 
                   value={disputeContractId} 
@@ -329,19 +409,19 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Nature of Grievance
+                  {lang === 'MR' ? 'तक्रारीचे स्वरूप' : 'Nature of Grievance'}
                 </label>
                 <select value={disputeType} onChange={(e) => setDisputeType(e.target.value)}>
-                  <option value="QUALITY_MISMATCH">Quality Mismatch (Moisture / Caliber)</option>
-                  <option value="WEIGHT_SHORTAGE">Weighment Shortage at APMC Gate</option>
-                  <option value="TRANSIT_DAMAGE">Transit / Spoilage Damage</option>
-                  <option value="DELAYED_DELIVERY">Delayed Dispatch beyond SLA</option>
+                  <option value="QUALITY_MISMATCH">{lang === 'MR' ? 'गुणवत्ता फरक (ओलावा / प्रतवारी)' : 'Quality Mismatch (Moisture / Caliber)'}</option>
+                  <option value="WEIGHT_SHORTAGE">{lang === 'MR' ? 'APMC गेटवर वजन तूट' : 'Weighment Shortage at APMC Gate'}</option>
+                  <option value="TRANSIT_DAMAGE">{lang === 'MR' ? 'वाहतुकीदरम्यान मालाचे नुकसान' : 'Transit / Spoilage Damage'}</option>
+                  <option value="DELAYED_DELIVERY">{lang === 'MR' ? 'करारापेक्षा उशिरा पोहोच' : 'Delayed Dispatch beyond SLA'}</option>
                 </select>
               </div>
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Claimed Deduction Amount (₹)
+                  {t.claimedDeduction} (₹)
                 </label>
                 <input 
                   type="number" 
@@ -352,7 +432,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Detailed Grievance Description
+                  {lang === 'MR' ? 'तपशीलवार तक्रार वर्णन' : 'Detailed Grievance Description'}
                 </label>
                 <textarea 
                   rows={2} 
@@ -363,7 +443,7 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Inspection Photo Evidence URL
+                  {lang === 'MR' ? 'तपासणी छायाचित्र लिंक (पुरावा)' : 'Inspection Photo Evidence URL'}
                 </label>
                 <input 
                   type="text" 
@@ -373,9 +453,11 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-                <button type="button" className="btn-gov-secondary" onClick={() => setShowFileModal(false)}>Cancel</button>
+                <button type="button" className="btn-gov-secondary" onClick={() => setShowFileModal(false)}>
+                  {lang === 'MR' ? 'रद्द करा' : 'Cancel'}
+                </button>
                 <button type="submit" className="btn-gov-primary" style={{ backgroundColor: '#dc2626' }}>
-                  Submit Grievance to APMC
+                  {lang === 'MR' ? 'बाजार समितीकडे तक्रार नोंदवा' : 'Submit Grievance to APMC'}
                 </button>
               </div>
             </form>

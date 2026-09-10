@@ -1,24 +1,140 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, ShieldCheck, Clock, ArrowRight, 
-  Printer, FileText, SlidersHorizontal, Plus, 
-  MessageSquare, Building2, PhoneCall, X
+  Printer, Plus, 
+  MessageSquare, Building2, PhoneCall, X, QrCode, Check
 } from 'lucide-react';
-import type { User } from '../services/api';
+import { api, type User, type ProduceLot, type RFQ, type Contract } from '../services/api';
+import { translations, type Language } from '../utils/i18n';
 
 interface FarmerPortalProps {
   currentUser: User | null;
   onNavigateToRFQs: () => void;
+  lang?: Language;
 }
 
-export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) => {
+const CROP_IMAGES: Record<string, string> = {
+  Onion: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80',
+  Soybean: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=600&auto=format&fit=crop&q=80',
+  Tomato: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+  Wheat: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=600&auto=format&fit=crop&q=80',
+  Cotton: 'https://images.unsplash.com/photo-1606041008023-472dfb5e530f?w=600&auto=format&fit=crop&q=80',
+  Orange: 'https://images.unsplash.com/photo-1557800636-894a64c1696f?w=600&auto=format&fit=crop&q=80'
+};
+
+function getCropImage(commodity: string): string {
+  for (const [crop, url] of Object.entries(CROP_IMAGES)) {
+    if (commodity.toLowerCase().includes(crop.toLowerCase())) {
+      return url;
+    }
+  }
+  return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop&q=80';
+}
+
+export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavigateToRFQs, lang = 'EN' }) => {
+  const t = translations[lang];
+  const [lots, setLots] = useState<ProduceLot[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [showAddHarvestModal, setShowAddHarvestModal] = useState<boolean>(false);
+  const [qrModalLot, setQrModalLot] = useState<ProduceLot | null>(null);
+  const [showIncomingOffers, setShowIncomingOffers] = useState<boolean>(false);
+  const [counterPriceInput, setCounterPriceInput] = useState<Record<number, number>>({});
+  const [lotSuccessMsg, setLotSuccessMsg] = useState<string>('');
+
+  // New Harvest Form State
   const [newCommodity, setNewCommodity] = useState<string>('Nasik Red Onion');
-  const [newVolume, setNewVolume] = useState<number>(30);
-  const [newRate, setNewRate] = useState<number>(2450);
+  const [newVariety, setNewVariety] = useState<string>('Grade A Garwa');
+  const [newVolume, setNewVolume] = useState<number>(30); // MT
+  const [newRate, setNewRate] = useState<number>(2450); // ₹/qtl
+  const [newGrade, setNewGrade] = useState<string>('Grade A+');
+  const [newMoisture, setNewMoisture] = useState<number>(11.2);
+  const [newDeliveryDays, setNewDeliveryDays] = useState<number>(3);
+  const [newHub, setNewHub] = useState<string>('Lasalgaon APMC Cold Hub');
+
+  useEffect(() => {
+    loadData();
+  }, [currentUser]);
+
+  const loadData = async () => {
+    try {
+      const [allLots, allRfqs, allContracts] = await Promise.all([
+        api.getLots(),
+        api.getRFQs(),
+        api.getContracts()
+      ]);
+      setLots(allLots);
+      setRfqs(allRfqs);
+      setContracts(allContracts);
+    } catch (e) {
+      console.error('Error loading farmer data:', e);
+    }
+  };
+
+  const handleCreateLot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const created = await api.createLot({
+        farmer_id: currentUser?.id || 1,
+        farmer_name: currentUser?.name || 'Ramesh Patil (Nashik FPO)',
+        farmer_phone: currentUser?.phone || '9822012345',
+        commodity: newCommodity,
+        variety: newVariety,
+        quantity_quintals: newVolume * 10,
+        base_price_per_quintal: newRate,
+        quality_grade: newGrade,
+        moisture_percent: newMoisture,
+        expected_delivery_days: newDeliveryDays,
+        mandi_name: newHub,
+        district: currentUser?.district || 'Nashik',
+        description: `${newGrade} certified batch with ${newMoisture}% moisture index. Stored at ${newHub}.`
+      });
+
+      setShowAddHarvestModal(false);
+      await loadData();
+      setLotSuccessMsg(`✓ Lot #${created.id} successfully listed! ${newVolume} MT (${newVolume * 10} Qtl) is now live across institutional buyer network.`);
+      setTimeout(() => setLotSuccessMsg(''), 6000);
+    } catch (err) {
+      console.error('Error creating lot:', err);
+    }
+  };
+
+  const handleFarmerCounter = async (rfqId: number) => {
+    const price = counterPriceInput[rfqId];
+    if (!price) return;
+    try {
+      await api.counterOffer(rfqId, {
+        sender_id: currentUser?.id || 1,
+        sender_name: currentUser?.name || 'Farmer FPO',
+        sender_role: 'FARMER',
+        offered_price: price,
+        message_text: `Farmer FPO counter-offer: ₹${price}/qtl. Assay guaranteed.`
+      });
+      await loadData();
+      alert(`Counter-offer of ₹${price}/qtl transmitted to buyer.`);
+    } catch (err) {
+      console.error('Error countering offer:', err);
+    }
+  };
+
+  const handleFarmerAccept = async (rfqId: number) => {
+    try {
+      const res = await api.acceptRFQ(rfqId);
+      await loadData();
+      alert(`Offer Accepted! Digital Contract #${res.contract.contract_number} has been generated. Advance escrow pending buyer lock.`);
+    } catch (err) {
+      console.error('Error accepting RFQ:', err);
+    }
+  };
+
+  // Aggregated Dynamic Stats
+  const totalQuintalsListed = lots.reduce((acc, l) => acc + (Number(l.quantity_quintals) || 0), 0);
+  const totalMT = (totalQuintalsListed / 10).toFixed(1);
+  const totalEscrowSecured = contracts.reduce((acc, c) => acc + (c.escrow?.advance_amount || 0), 0);
+  const activeInquiriesCount = rfqs.filter(r => r.status === 'PENDING' || r.status === 'COUNTERED').length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingTop: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
       {/* 1. Header Banner */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px' }}>
         <div>
@@ -36,28 +152,55 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
             marginBottom: '6px'
           }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669' }} />
-            FPO ID: MH-NSK-2024-912 • Govt. Certified Custody Hub
+            {t.fpoBadge}
           </div>
-          <h2 style={{ fontSize: '1.65rem', color: '#0f172a' }}>Farmer Produce & Harvest Lots</h2>
+          <h2 style={{ fontSize: '1.65rem', color: '#0f172a' }}>{t.farmerTitle}</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Manage your aggregated harvest inventory, inspect verified institutional buyer offers, and track escrow-secured settlements with state APMC assurance.
+            {t.farmerSubtitle}
           </p>
         </div>
 
         {/* Right Action Buttons */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-gov-secondary">
-            <SlidersHorizontal size={14} /> Lot Filters
+          <button 
+            className="btn-gov-secondary"
+            onClick={() => setShowIncomingOffers(!showIncomingOffers)}
+            style={{ 
+              backgroundColor: showIncomingOffers ? '#ecfdf5' : '#ffffff',
+              borderColor: showIncomingOffers ? '#a7f3d0' : 'var(--border-card)',
+              color: showIncomingOffers ? '#065f46' : '#334155'
+            }}
+          >
+            <MessageSquare size={14} /> {t.viewOffers} ({activeInquiriesCount})
           </button>
 
           <button 
             className="btn-gov-primary"
             onClick={() => setShowAddHarvestModal(true)}
           >
-            <Plus size={16} /> List New Harvest
+            <Plus size={16} /> {t.listNewHarvest}
           </button>
         </div>
       </div>
+
+      {/* Success Banner */}
+      {lotSuccessMsg && (
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          border: '1px solid #a7f3d0',
+          color: '#065f46',
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.84rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <Check size={16} />
+          <span>{lotSuccessMsg}</span>
+        </div>
+      )}
 
       {/* 2. Top 3 Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
@@ -66,7 +209,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Total Listed Stock
+                {t.totalListedStock}
               </span>
               <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-xs)', backgroundColor: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
                 <Package size={16} />
@@ -75,21 +218,21 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
-                185
+                {totalQuintalsListed}
               </span>
               <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#64748b' }}>
-                Quintals (18.5 MT)
+                Quintals ({totalMT} MT)
               </span>
             </div>
 
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-              <strong style={{ color: '#059669' }}>● 3 active lots</strong> • Lasalgaon & Pune Hubs
+              <strong style={{ color: '#059669' }}>● {lots.length} {t.activeHarvestLots}</strong> • APMC Certified Yards
             </p>
           </div>
 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              <span>Warehouse Capacity</span>
+              <span>Godown Capacity</span>
               <strong>68% Utilized</strong>
             </div>
             <div style={{ height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
@@ -103,7 +246,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Safe Escrow Balance
+                {t.safeEscrowBalance}
               </span>
               <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-xs)', backgroundColor: '#f0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
                 <Building2 size={16} />
@@ -111,18 +254,18 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
             </div>
 
             <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#059669', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
-              ₹6,40,000
+              ₹{(totalEscrowSecured || 640000).toLocaleString()}
             </div>
 
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck size={14} color="#059669" /> Held in SBI Mandi Custody Escrow
+              <ShieldCheck size={14} color="#059669" /> Held in RBI-Regulated Nodal Escrow
             </p>
           </div>
 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              <span>Next Payout Cycle</span>
-              <strong>28 Nov, 14:00 IST</strong>
+              <span>Next Payout Window</span>
+              <strong>T+24h post APMC Gate Inspection</strong>
             </div>
             <div style={{ height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
               <div style={{ width: '85%', height: '100%', backgroundColor: '#0284c7' }} />
@@ -135,7 +278,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Pending Inquiries
+                {t.pendingInquiries}
               </span>
               <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-xs)', backgroundColor: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
                 <Clock size={16} />
@@ -144,257 +287,214 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
-                4
+                {activeInquiriesCount}
               </span>
               <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#64748b' }}>
-                Wholesale Buyers
+                Active Buyer Bids
               </span>
             </div>
 
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-              Highest Bid: <strong style={{ color: '#059669' }}>₹2,580/qtl</strong> • +5.3% vs APMC
+              Highest Bid: <strong style={{ color: '#059669' }}>₹2,420/qtl</strong> • Escrow Guaranteed
             </p>
           </div>
 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              <span>Avg Response Speed</span>
-              <strong>42 mins</strong>
+              <span>Bilateral Response Time</span>
+              <strong>&lt; 30 mins</strong>
             </div>
             <div style={{ height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ width: '45%', height: '100%', backgroundColor: '#d97706' }} />
+              <div style={{ width: '55%', height: '100%', backgroundColor: '#d97706' }} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Main Split Section */}
+      {/* 3. Incoming Offers Drawer (Interactive Negotiation for Farmers) */}
+      {showIncomingOffers && (
+        <div className="gov-card" style={{ padding: '20px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MessageSquare size={16} color="#065f46" />
+              <h4 style={{ fontSize: '1rem', color: '#065f46' }}>{t.incomingOffersTitle}</h4>
+            </div>
+            <button onClick={() => setShowIncomingOffers(false)} style={{ background: 'transparent', color: '#64748b' }}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {rfqs.map(r => (
+              <div 
+                key={r.id} 
+                style={{ 
+                  backgroundColor: '#ffffff', 
+                  borderRadius: 'var(--radius-sm)', 
+                  border: '1px solid #e2e8f0', 
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{r.buyer_name}</strong>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Commodity: <strong>{r.commodity}</strong> • Qty: <strong>{r.quantity_quintals} Qtl</strong> • Ref: RFQ #{r.id}
+                    </div>
+                  </div>
+                  <span className="badge-amber-tag">
+                    Current Offer: ₹{r.current_offered_price} / qtl
+                  </span>
+                </div>
+
+                {r.messages && r.messages.length > 0 && (
+                  <div style={{ backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: 'var(--radius-xs)', fontSize: '0.75rem', color: '#475569' }}>
+                    💬 Last message: <em>"{r.messages[r.messages.length - 1].message_text}"</em>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                  <input 
+                    type="number" 
+                    placeholder="Enter counter ₹/qtl"
+                    value={counterPriceInput[r.id] || ''}
+                    onChange={(e) => setCounterPriceInput({ ...counterPriceInput, [r.id]: Number(e.target.value) })}
+                    style={{ width: '150px', padding: '6px 10px', fontSize: '0.78rem' }}
+                  />
+
+                  <button 
+                    className="btn-gov-secondary"
+                    onClick={() => handleFarmerCounter(r.id)}
+                    style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                  >
+                    {t.counterOfferBtn}
+                  </button>
+
+                  <button 
+                    className="btn-gov-primary"
+                    onClick={() => handleFarmerAccept(r.id)}
+                    style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                  >
+                    {t.acceptOffer}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Main Split Section: Active Lots (Left) & Direct Institutional Buyers (Right) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '20px' }}>
-        {/* Left Column: Active Harvest Lots */}
+        {/* Left Column: Dynamic Harvest Lots */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.05rem', color: '#0f172a' }}>Active Harvest Lots</h3>
+              <h3 style={{ fontSize: '1.05rem', color: '#0f172a' }}>{t.activeHarvestLots}</h3>
               <span style={{ backgroundColor: '#ecfdf5', color: '#065f46', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                3 Batches Listed
+                {lots.length} Batches Listed
               </span>
             </div>
 
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Sort by: <strong>Recent Activity ▾</strong>
+              Total Volume: <strong>{totalQuintalsListed} Quintals</strong>
             </div>
           </div>
 
-          {/* Lot 1: Nasik Red Onion */}
-          <div className="gov-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-              <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0 }}>
-                <img 
-                  src="https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400&auto=format&fit=crop&q=80" 
-                  alt="Onion lot"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <span style={{ position: 'absolute', bottom: '2px', left: '2px', backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '0.58rem', padding: '1px 4px', borderRadius: '2px', fontWeight: 700 }}>
-                  LOT #819
-                </span>
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h4 style={{ fontSize: '1.05rem', color: '#0f172a' }}>Nasik Red Onion</h4>
-                    <span className="badge-grade-a">Grade A</span>
-                  </div>
-                  <span className="badge-amber-tag">● 3 Active Inquiries</span>
+          {/* Render Dynamic Lots */}
+          {lots.map(lot => (
+            <div key={lot.id} className="gov-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0 }}>
+                  <img 
+                    src={getCropImage(lot.commodity)} 
+                    alt={lot.commodity}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <span style={{ position: 'absolute', bottom: '2px', left: '2px', backgroundColor: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.58rem', padding: '1px 4px', borderRadius: '2px', fontWeight: 700 }}>
+                    LOT #{lot.id}
+                  </span>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Lasalgaon Cold Hub • Bay 14-C
-                </div>
-              </div>
-            </div>
 
-            {/* 4 Metrics Strip */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>AVAILABLE QTY</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>45 MT (450 qtl)</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>ASKING RATE</div>
-                <strong style={{ fontSize: '0.86rem', color: '#059669' }}>₹2,450 / qtl</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>MOISTURE INDEX</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>11.4% (Optimal)</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>APMC PARITY</div>
-                <strong style={{ fontSize: '0.82rem', color: '#059669' }}>+₹120 / qtl</strong>
-              </div>
-            </div>
-
-            {/* Action Footer */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Tag: ANSK-ON-045-819
-              </span>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn-gov-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }}>
-                  <Printer size={13} /> Print QR Tag
-                </button>
-                <button 
-                  className="btn-gov-primary" 
-                  style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                  onClick={onNavigateToRFQs}
-                >
-                  View Offers (3) <ArrowRight size={13} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Lot 2: JS-335 Yellow Soybean */}
-          <div className="gov-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-              <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0 }}>
-                <img 
-                  src="https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=400&auto=format&fit=crop&q=80" 
-                  alt="Soybean Silo"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <span style={{ position: 'absolute', bottom: '2px', left: '2px', backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '0.58rem', padding: '1px 4px', borderRadius: '2px', fontWeight: 700 }}>
-                  LOT #612
-                </span>
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h4 style={{ fontSize: '1.05rem', color: '#0f172a' }}>JS-335 Yellow Soybean</h4>
-                    <span className="badge-blue-tag">State Certified</span>
-                  </div>
-                  <span className="badge-grade-a">🔒 Advance Deposited (50%)</span>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Akola Agrilogistics Park • Silo 03
-                </div>
-              </div>
-            </div>
-
-            {/* 4 Metrics Strip */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>BATCH VOLUME</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>30 MT (300 qtl)</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>CONTRACT PRICE</div>
-                <strong style={{ fontSize: '0.86rem', color: '#059669' }}>₹4,820 / qtl</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>ESCROW GUARANTEE</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0284c7' }}>₹7,23,000</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>DISPATCH DATE</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>30 Nov 2024</strong>
-              </div>
-            </div>
-
-            {/* Action Footer */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Contract Buyer: <strong>BigBasket Regional Processing Hub</strong>
-              </span>
-
-              <button 
-                className="btn-gov-primary" 
-                style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                onClick={() => alert('Viewing binding APMC digital contract signed under MSIS escrow rules.')}
-              >
-                <FileText size={13} /> View Contract
-              </button>
-            </div>
-          </div>
-
-          {/* Lot 3: Lokwan Desi Wheat */}
-          <div className="gov-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-              <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0 }}>
-                <img 
-                  src="https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400&auto=format&fit=crop&q=80" 
-                  alt="Wheat assay sample"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <span style={{ position: 'absolute', bottom: '2px', left: '2px', backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '0.58rem', padding: '1px 4px', borderRadius: '2px', fontWeight: 700 }}>
-                  LOT #790
-                </span>
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h4 style={{ fontSize: '1.05rem', color: '#0f172a' }}>Lokwan Desi Wheat</h4>
-                    <span style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', padding: '2px 6px', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>
-                      Sharbati Sub-type
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h4 style={{ fontSize: '1.05rem', color: '#0f172a' }}>{lot.commodity} ({lot.variety})</h4>
+                      <span className="badge-grade-a">{lot.quality_grade}</span>
+                    </div>
+                    <span className={lot.status === 'UNDER_CONTRACT' ? 'badge-blue-tag' : 'badge-amber-tag'}>
+                      ● {lot.status === 'UNDER_CONTRACT' ? 'Under Contract' : `${lot.expected_delivery_days} Days Dispatch`}
                     </span>
                   </div>
-                  <span className="badge-blue-tag">🔄 Assaying In Progress</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {lot.mandi_name || 'APMC Nodal Hub'} • {lot.district}, Maharashtra
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Chhatrapati Sambhajinagar APMC • Godown 02
+              </div>
+
+              {/* 4 Metrics Strip */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.availableQty}</div>
+                  <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.quantity_quintals} qtl ({(lot.quantity_quintals / 10).toFixed(1)} MT)</strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.askingRate}</div>
+                  <strong style={{ fontSize: '0.86rem', color: '#059669' }}>₹{lot.base_price_per_quintal} / qtl</strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.moistureIndex}</div>
+                  <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.moisture_percent}% (NABL Tested)</strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.apmcParity}</div>
+                  <strong style={{ fontSize: '0.82rem', color: '#059669' }}>+₹120 / qtl</strong>
+                </div>
+              </div>
+
+              {/* Action Footer */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Tag: MH-{lot.district.slice(0, 3).toUpperCase()}-{lot.id}
+                </span>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="btn-gov-secondary" 
+                    style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                    onClick={() => setQrModalLot(lot)}
+                  >
+                    <QrCode size={13} /> {t.printQrTag}
+                  </button>
+                  <button 
+                    className="btn-gov-primary" 
+                    style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                    onClick={onNavigateToRFQs}
+                  >
+                    {t.viewOffers} <ArrowRight size={13} />
+                  </button>
                 </div>
               </div>
             </div>
-
-            {/* 4 Metrics Strip */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>BATCH VOLUME</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>25 MT (250 qtl)</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>TARGET BASE</div>
-                <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>₹2,750 / qtl</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>LAB SAMPLE</div>
-                <strong style={{ fontSize: '0.82rem', color: '#64748b' }}>MSAMB #402</strong>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>EXPECTED ASSAY</div>
-                <strong style={{ fontSize: '0.82rem', color: '#0284c7' }}>Today, 18:00</strong>
-              </div>
-            </div>
-
-            {/* Action Footer */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Digital assay cert will auto-publish to marketplace upon verification.
-              </span>
-
-              <button className="btn-gov-secondary" style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
-                Update Lot Notes
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Right Column: Direct Institutional Buyers & MSP Guarantee */}
+        {/* Right Column: Direct Institutional Buyers & MSP Floor */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="gov-card" style={{ padding: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
-                <h4 style={{ fontSize: '0.98rem', color: '#0f172a' }}>Direct Institutional Buyers</h4>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verified wholesale procurement RFQs</div>
+                <h4 style={{ fontSize: '0.98rem', color: '#0f172a' }}>{t.directBuyers}</h4>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verified wholesale procurement standing RFQs</div>
               </div>
               <ShieldCheck size={16} color="#059669" />
             </div>
 
-            {/* 3 Buyer Cards */}
+            {/* Buyer 1 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* Buyer 1 */}
               <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -402,8 +502,8 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
                       RR
                     </div>
                     <div>
-                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>Reliance Retail Hub</strong>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Institutional Partner</div>
+                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>Reliance Retail Agro Hub</strong>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Institutional Partner • Pre-approved Escrow</div>
                     </div>
                   </div>
                   <span className="badge-grade-a">HIGH MATCH</span>
@@ -414,15 +514,15 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
                   <span style={{ color: '#059669', fontWeight: 700 }}>₹2,580 / qtl</span>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  Delivery Window: Within 4 Days
+                  Delivery Window: Within 4 Days • Gate Weighment Guarantee
                 </div>
 
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={() => alert('Contacting Reliance Procurement Hub. Direct negotiation channel opened.')}
+                  onClick={onNavigateToRFQs}
                 >
-                  <MessageSquare size={12} /> Contact Buyer
+                  <MessageSquare size={12} /> Direct Bid Channel
                 </button>
               </div>
 
@@ -434,27 +534,27 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
                       BB
                     </div>
                     <div>
-                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>BigBasket B2B Supply</strong>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Pre-cleared Escrow</div>
+                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>BigBasket Direct Farm Sourcing</strong>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Pre-cleared 50% Escrow Advance</div>
                     </div>
                   </div>
                   <span className="badge-amber-tag">URGENT</span>
                 </div>
 
                 <div style={{ fontSize: '0.76rem', color: '#475569', display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                  <span>Requirement: <strong>50 MT Soybean (JS-335)</strong></span>
-                  <span style={{ color: '#059669', fontWeight: 700 }}>₹4,850 / qtl</span>
+                  <span>Requirement: <strong>85 MT Soybean (JS-335)</strong></span>
+                  <span style={{ color: '#059669', fontWeight: 700 }}>₹4,890 / qtl</span>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  Drop-off: Pune Chakan Hub
+                  Drop-off: Pune Chakan Cold Logistics Hub
                 </div>
 
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={() => alert('Contacting BigBasket Procurement Desk.')}
+                  onClick={onNavigateToRFQs}
                 >
-                  <MessageSquare size={12} /> Contact Buyer
+                  <MessageSquare size={12} /> Direct Bid Channel
                 </button>
               </div>
 
@@ -463,40 +563,38 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: '#b45309', color: '#fff', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      ITC
+                      SA
                     </div>
                     <div>
-                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>ITC Agri Business</strong>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>e-Choupal Verified</div>
+                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>Sahyadri Agro Processing Ltd</strong>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Export Processing Mega Hub</div>
                     </div>
                   </div>
-                  <span style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', padding: '2px 6px', borderRadius: 'var(--radius-full)', fontWeight: 600 }}>
-                    STANDING RFQ
-                  </span>
+                  <span className="badge-blue-tag">STANDING RFQ</span>
                 </div>
 
                 <div style={{ fontSize: '0.76rem', color: '#475569', display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                  <span>Requirement: <strong>40 MT Lokwan Wheat</strong></span>
-                  <span style={{ color: '#059669', fontWeight: 700 }}>₹2,810 / qtl</span>
+                  <span>Requirement: <strong>40 MT Tomato / Onion</strong></span>
+                  <span style={{ color: '#059669', fontWeight: 700 }}>₹2,450 / qtl</span>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  Inspection: Farm Gate Collection
+                  Inspection: Dindori Mega Food Park
                 </div>
 
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={() => alert('Connecting with ITC Agri Procurement Representative.')}
+                  onClick={onNavigateToRFQs}
                 >
-                  <MessageSquare size={12} /> Contact Buyer
+                  <MessageSquare size={12} /> Direct Bid Channel
                 </button>
               </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              <span>Need direct mandi support?</span>
+              <span>Need direct mandi arbitration support?</span>
               <span style={{ color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <PhoneCall size={12} /> Call Kisan Desk
+                <PhoneCall size={12} /> 1800-233-AGRO
               </span>
             </div>
           </div>
@@ -505,63 +603,133 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
           <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 'var(--radius-md)', padding: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <ShieldCheck size={18} color="#059669" />
-              <strong style={{ fontSize: '0.88rem', color: '#065f46' }}>Govt. MSP Floor Guarantee</strong>
+              <strong style={{ fontSize: '0.88rem', color: '#065f46' }}>{t.mspFloorTitle}</strong>
             </div>
             <p style={{ fontSize: '0.75rem', color: '#065f46', lineHeight: 1.4, marginBottom: '8px' }}>
-              All harvest contracts initiated via AgroConnect include guaranteed MSP floor settlement backed by the Maharashtra State Agricultural Marketing Board (MSAMB).
+              {t.mspFloorDesc}
             </p>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600, color: '#065f46', borderTop: '1px solid #a7f3d0', paddingTop: '6px' }}>
-              <span>Current Soy MSP: <strong>₹4,892/qtl</strong></span>
+              <span>Soybean MSP: <strong>₹4,892/qtl</strong> • Cotton MSP: <strong>₹7,122/qtl</strong></span>
               <span>● Fully Protected</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Modal: List New Harvest */}
+      {/* Modal 1: List New Harvest Batch */}
       {showAddHarvestModal && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '540px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '1.2rem', color: '#0f172a' }}>List New Harvest Batch (Govt. Assay Certified)</h3>
+              <h3 style={{ fontSize: '1.15rem', color: '#0f172a' }}>{t.publishBatchTitle}</h3>
               <button onClick={() => setShowAddHarvestModal(false)} style={{ background: 'transparent', color: '#64748b' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleCreateLot} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  Commodity & Variety
+                  {t.commodityLabel}
                 </label>
-                <select value={newCommodity} onChange={(e) => setNewCommodity(e.target.value)}>
-                  <option value="Nasik Red Onion">Nasik Red Onion (Grade A Garwa)</option>
-                  <option value="Soybean JS-335">Soybean JS-335 (Certified Oilseed)</option>
-                  <option value="Lokwan Desi Wheat">Lokwan Desi Wheat (Sharbati)</option>
-                  <option value="Tomato Hybrid Abhinav">Tomato Hybrid Abhinav</option>
+                <select 
+                  value={newCommodity} 
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setNewCommodity(c);
+                    if (c === 'Onion') { setNewVariety('Nasik Red (Garwa)'); setNewRate(2450); }
+                    else if (c === 'Soybean') { setNewVariety('JS-335 Certified'); setNewRate(4890); }
+                    else if (c === 'Tomato') { setNewVariety('Hybrid Abhinav'); setNewRate(1950); }
+                    else if (c === 'Wheat') { setNewVariety('Lokwan Desi Sharbati'); setNewRate(2810); }
+                    else if (c === 'Cotton') { setNewVariety('Medium Long Staple'); setNewRate(7120); }
+                  }}
+                >
+                  <option value="Onion">Onion (कांदा)</option>
+                  <option value="Soybean">Soybean (सोयाबीन)</option>
+                  <option value="Tomato">Tomato (टोमॅटो)</option>
+                  <option value="Wheat">Wheat (गहू)</option>
+                  <option value="Cotton">Cotton (कापूस)</option>
                 </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                    Harvest Volume (Metric Tonnes)
+                    {t.harvestVolumeLabel}
                   </label>
                   <input 
                     type="number" 
+                    min={1}
                     value={newVolume} 
                     onChange={(e) => setNewVolume(Number(e.target.value))} 
+                    required
                   />
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    = {newVolume * 10} Quintals
+                  </span>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                    Base Asking Rate (₹ / Quintal)
+                    {t.baseAskingRateLabel}
                   </label>
                   <input 
                     type="number" 
                     value={newRate} 
                     onChange={(e) => setNewRate(Number(e.target.value))} 
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.qualityGradeLabel}
+                  </label>
+                  <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
+                    <option value="Grade A+">Grade A+ (Export Quality)</option>
+                    <option value="Grade A">Grade A (Standard Commercial)</option>
+                    <option value="Grade B">Grade B (Processing Grade)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.moistureLabel}
+                  </label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={newMoisture} 
+                    onChange={(e) => setNewMoisture(Number(e.target.value))} 
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.expectedDeliveryDaysLabel}
+                  </label>
+                  <input 
+                    type="number" 
+                    min={1} 
+                    max={14}
+                    value={newDeliveryDays} 
+                    onChange={(e) => setNewDeliveryDays(Number(e.target.value))} 
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.storageHubLabel}
+                  </label>
+                  <input 
+                    type="text" 
+                    value={newHub} 
+                    onChange={(e) => setNewHub(e.target.value)} 
                   />
                 </div>
               </div>
@@ -571,19 +739,111 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-                <button className="btn-gov-secondary" onClick={() => setShowAddHarvestModal(false)}>
-                  Cancel
+                <button type="button" className="btn-gov-secondary" onClick={() => setShowAddHarvestModal(false)}>
+                  {t.cancelBtn}
                 </button>
-                <button 
-                  className="btn-gov-primary"
-                  onClick={() => {
-                    setShowAddHarvestModal(false);
-                    alert(`Harvest lot published! ${newVolume} MT of ${newCommodity} now live for institutional procurement.`);
-                  }}
-                >
-                  Publish Harvest Lot
+                <button type="submit" className="btn-gov-primary">
+                  {t.publishLotBtn}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Official Printable QR Traceability Tag */}
+      {qrModalLot && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <QrCode size={18} color="#065f46" />
+                <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>APMC Digital Custody Tag</strong>
+              </div>
+              <button onClick={() => setQrModalLot(null)} style={{ background: 'transparent', color: '#64748b' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Printable Badge Body */}
+            <div style={{
+              border: '2px dashed #065f46',
+              borderRadius: 'var(--radius-sm)',
+              padding: '16px',
+              backgroundColor: '#f8fafc',
+              textAlign: 'left'
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#065f46', textTransform: 'uppercase' }}>
+                  GOVERNMENT OF MAHARASHTRA • MSIS NODAL HUB
+                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>
+                  BATCH CUSTODY IDENTIFICATION TAG
+                </div>
+              </div>
+
+              {/* Visual Simulated QR Code */}
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                <svg width="120" height="120" viewBox="0 0 120 120">
+                  <rect width="120" height="120" fill="#ffffff" rx="8" />
+                  {/* Position squares */}
+                  <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
+                  <rect x="15" y="15" width="20" height="20" fill="#ffffff" />
+                  <rect x="20" y="20" width="10" height="10" fill="#065f46" />
+                  
+                  <rect x="80" y="10" width="30" height="30" fill="#0f172a" />
+                  <rect x="85" y="15" width="20" height="20" fill="#ffffff" />
+                  <rect x="90" y="20" width="10" height="10" fill="#065f46" />
+
+                  <rect x="10" y="80" width="30" height="30" fill="#0f172a" />
+                  <rect x="15" y="85" width="20" height="20" fill="#ffffff" />
+                  <rect x="20" y="90" width="10" height="10" fill="#065f46" />
+
+                  {/* QR Data Grid Matrix */}
+                  <rect x="50" y="15" width="6" height="6" fill="#0f172a" />
+                  <rect x="62" y="22" width="6" height="6" fill="#0f172a" />
+                  <rect x="48" y="35" width="6" height="6" fill="#0f172a" />
+                  <rect x="65" y="48" width="6" height="6" fill="#0f172a" />
+                  <rect x="35" y="55" width="6" height="6" fill="#0f172a" />
+                  <rect x="50" y="65" width="6" height="6" fill="#0f172a" />
+                  <rect x="80" y="60" width="6" height="6" fill="#0f172a" />
+                  <rect x="95" y="70" width="6" height="6" fill="#0f172a" />
+                  <rect x="55" y="85" width="6" height="6" fill="#0f172a" />
+                  <rect x="68" y="95" width="6" height="6" fill="#0f172a" />
+                </svg>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.74rem', borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                <div><strong>TAG ID:</strong> MH-{qrModalLot.district.slice(0, 3).toUpperCase()}-LOT-{qrModalLot.id}</div>
+                <div><strong>COMMODITY:</strong> {qrModalLot.commodity} ({qrModalLot.variety})</div>
+                <div><strong>VOLUME:</strong> {qrModalLot.quantity_quintals} Qtl ({(qrModalLot.quantity_quintals / 10).toFixed(1)} MT)</div>
+                <div><strong>LAB GRADE:</strong> {qrModalLot.quality_grade} (Moisture: {qrModalLot.moisture_percent}%)</div>
+                <div><strong>FARMER / FPO:</strong> {qrModalLot.farmer_name}</div>
+                <div><strong>APMC HUB:</strong> {qrModalLot.mandi_name}</div>
+              </div>
+
+              <div style={{ marginTop: '10px', padding: '6px 8px', backgroundColor: '#ecfdf5', borderRadius: '4px', fontSize: '0.68rem', color: '#065f46', textAlign: 'center', fontWeight: 600 }}>
+                ✓ NABL Laboratory Seal & RBI Escrow Guaranteed
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+              <button 
+                className="btn-gov-secondary" 
+                style={{ flex: 1 }}
+                onClick={() => setQrModalLot(null)}
+              >
+                Close
+              </button>
+              <button 
+                className="btn-gov-primary"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                <Printer size={14} /> Print Custody Label
+              </button>
             </div>
           </div>
         </div>
@@ -591,3 +851,5 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ onNavigateToRFQs }) 
     </div>
   );
 };
+
+export default FarmerPortal;
