@@ -99,7 +99,7 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({ lang = 'EN
   const topGainer = [...prices].sort((a, b) => (b.change_24h || 0) - (a.change_24h || 0))[0] || prices[0];
 
   // Dynamic calculations for transport
-  const destMandiObj = mandis.find(m => m.id === destMandiId) || mandis[0];
+  const destMandiObj = mandis.find(m => m.id === destMandiId) || mandis[0] || { name: 'Lasalgaon APMC', district: 'Nashik' };
   const destPriceRecord = prices.find(p => p.mandi_id === destMandiId) || prices[0];
   const ratePerQtl = destPriceRecord?.modal_price || 2450;
   const grossRealization = harvestQty * ratePerQtl;
@@ -618,7 +618,7 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({ lang = 'EN
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.84rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#475569' }}>Gross Realization ({destMandiObj.name} @ ₹{ratePerQtl}/qtl)</span>
+                <span style={{ color: '#475569' }}>Gross Realization ({destMandiObj?.name || 'Selected Mandi'} @ ₹{ratePerQtl}/qtl)</span>
                 <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{grossRealization.toLocaleString()}</span>
               </div>
 
