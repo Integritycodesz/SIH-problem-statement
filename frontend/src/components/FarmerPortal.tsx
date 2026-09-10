@@ -9,8 +9,9 @@ import { translations, type Language } from '../utils/i18n';
 
 interface FarmerPortalProps {
   currentUser: User | null;
-  onNavigateToRFQs: () => void;
+  onNavigateToRFQs: (lot?: ProduceLot) => void;
   lang?: Language;
+  onRequireAuth?: (message?: string, onComplete?: () => void) => void;
 }
 
 const CROP_IMAGES: Record<string, string> = {
@@ -31,7 +32,7 @@ function getCropImage(commodity: string): string {
   return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop&q=80';
 }
 
-export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavigateToRFQs, lang = 'EN' }) => {
+export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavigateToRFQs, lang = 'EN', onRequireAuth }) => {
   const t = translations[lang];
   const [lots, setLots] = useState<ProduceLot[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
@@ -127,6 +128,20 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
     }
   };
 
+  const handleOpenDirectBid = () => {
+    const doNav = () => onNavigateToRFQs();
+    if (onRequireAuth && !currentUser) {
+      onRequireAuth(
+        lang === 'MR'
+          ? 'थेट संस्थात्मक खरेदीदार चॅनेल सुरू करण्यासाठी कृपया लॉगिन करा.'
+          : 'Connecting to direct institutional buyer channels requires authentication. Please sign in first.',
+        doNav
+      );
+    } else {
+      doNav();
+    }
+  };
+
   // Aggregated Dynamic Stats
   const totalQuintalsListed = lots.reduce((acc, l) => acc + (Number(l.quantity_quintals) || 0), 0);
   const totalMT = (totalQuintalsListed / 10).toFixed(1);
@@ -164,7 +179,19 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
         <div style={{ display: 'flex', gap: '10px' }}>
           <button 
             className="btn-gov-secondary"
-            onClick={() => setShowIncomingOffers(!showIncomingOffers)}
+            onClick={() => {
+              const toggleOffers = () => setShowIncomingOffers(!showIncomingOffers);
+              if (onRequireAuth && !currentUser) {
+                onRequireAuth(
+                  lang === 'MR' 
+                    ? 'खरेदीदारांच्या ऑफर्स पाहण्यासाठी कृपया प्रथम लॉगिन करा.' 
+                    : 'Viewing incoming buyer offers requires authentication. Please sign in first.',
+                  toggleOffers
+                );
+              } else {
+                toggleOffers();
+              }
+            }}
             style={{ 
               backgroundColor: showIncomingOffers ? '#ecfdf5' : '#ffffff',
               borderColor: showIncomingOffers ? '#a7f3d0' : 'var(--border-card)',
@@ -176,7 +203,19 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
 
           <button 
             className="btn-gov-primary"
-            onClick={() => setShowAddHarvestModal(true)}
+            onClick={() => {
+              const openAddLot = () => setShowAddHarvestModal(true);
+              if (onRequireAuth && !currentUser) {
+                onRequireAuth(
+                  lang === 'MR' 
+                    ? 'नवीन शेतमाल नोंदवण्यासाठी कृपया शेतकरी म्हणून लॉगिन करा.' 
+                    : 'Listing a new harvest lot requires a verified farmer account. Please sign in first.',
+                  openAddLot
+                );
+              } else {
+                openAddLot();
+              }
+            }}
           >
             <Plus size={16} /> {t.listNewHarvest}
           </button>
@@ -367,7 +406,19 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
 
                   <button 
                     className="btn-gov-secondary"
-                    onClick={() => handleFarmerCounter(r.id)}
+                    onClick={() => {
+                      const doCounter = () => handleFarmerCounter(r.id);
+                      if (onRequireAuth && !currentUser) {
+                        onRequireAuth(
+                          lang === 'MR' 
+                            ? 'प्रति-ऑफर पाठवण्यासाठी कृपया लॉगिन करा.' 
+                            : 'Submitting a counter-offer requires authentication. Please sign in first.',
+                          doCounter
+                        );
+                      } else {
+                        doCounter();
+                      }
+                    }}
                     style={{ padding: '6px 12px', fontSize: '0.75rem' }}
                   >
                     {t.counterOfferBtn}
@@ -375,7 +426,19 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
 
                   <button 
                     className="btn-gov-primary"
-                    onClick={() => handleFarmerAccept(r.id)}
+                    onClick={() => {
+                      const doAccept = () => handleFarmerAccept(r.id);
+                      if (onRequireAuth && !currentUser) {
+                        onRequireAuth(
+                          lang === 'MR' 
+                            ? 'ऑफर स्वीकारण्यासाठी कृपया लॉगिन करा.' 
+                            : 'Accepting buyer contract offer requires authentication. Please sign in first.',
+                          doAccept
+                        );
+                      } else {
+                        doAccept();
+                      }
+                    }}
                     style={{ padding: '6px 14px', fontSize: '0.75rem' }}
                   >
                     {t.acceptOffer}
@@ -387,20 +450,25 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
         </div>
       )}
 
-      {/* 4. Main Split Section: Active Lots (Left) & Direct Institutional Buyers (Right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '20px' }}>
-        {/* Left Column: Dynamic Harvest Lots */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* 4. Main Split Section: Active Lots (Left - Big) & Direct Institutional Buyers (Right - Thin Sidebar) */}
+      <div className="farmer-portal-grid">
+        {/* Left Column: Dynamic Harvest Lots (Wide) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.05rem', color: '#0f172a' }}>{t.activeHarvestLots}</h3>
+              <h3 style={{ fontSize: '1.1rem', color: '#0f172a' }}>{t.activeHarvestLots}</h3>
               <span style={{ backgroundColor: '#ecfdf5', color: '#065f46', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
                 {lots.length} Batches Listed
               </span>
             </div>
 
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Total Volume: <strong>{totalQuintalsListed} Quintals</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>Total Volume: <strong style={{ color: '#0f172a' }}>{totalQuintalsListed} Quintals</strong></span>
+              <span style={{ color: '#cbd5e1' }}>•</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>Sort by:</span>
+                <span style={{ fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>Recent Activity ▾</span>
+              </div>
             </div>
           </div>
 
@@ -465,14 +533,38 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
                   <button 
                     className="btn-gov-secondary" 
                     style={{ padding: '6px 10px', fontSize: '0.75rem' }}
-                    onClick={() => setQrModalLot(lot)}
+                    onClick={() => {
+                      const openQr = () => setQrModalLot(lot);
+                      if (onRequireAuth && !currentUser) {
+                        onRequireAuth(
+                          lang === 'MR' 
+                            ? 'QR ट्रेसिबिलिटी टॅग प्रिंट करण्यासाठी कृपया लॉगिन करा.' 
+                            : 'Generating APMC traceability QR tag requires authentication. Please sign in first.',
+                          openQr
+                        );
+                      } else {
+                        openQr();
+                      }
+                    }}
                   >
                     <QrCode size={13} /> {t.printQrTag}
                   </button>
                   <button 
                     className="btn-gov-primary" 
                     style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                    onClick={onNavigateToRFQs}
+                    onClick={() => {
+                      const navOffers = () => onNavigateToRFQs(lot);
+                      if (onRequireAuth && !currentUser) {
+                        onRequireAuth(
+                          lang === 'MR' 
+                            ? 'खरेदीदारांशी थेट वाटाघाटी करण्यासाठी कृपया लॉगिन करा.' 
+                            : 'Accessing buyer RFQ negotiation for this lot requires authentication. Please sign in first.',
+                          navOffers
+                        );
+                      } else {
+                        navOffers();
+                      }
+                    }}
                   >
                     {t.viewOffers} <ArrowRight size={13} />
                   </button>
@@ -520,7 +612,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={onNavigateToRFQs}
+                  onClick={handleOpenDirectBid}
                 >
                   <MessageSquare size={12} /> Direct Bid Channel
                 </button>
@@ -552,7 +644,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={onNavigateToRFQs}
+                  onClick={handleOpenDirectBid}
                 >
                   <MessageSquare size={12} /> Direct Bid Channel
                 </button>
@@ -584,7 +676,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({ currentUser, onNavig
                 <button 
                   className="btn-gov-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                  onClick={onNavigateToRFQs}
+                  onClick={handleOpenDirectBid}
                 >
                   <MessageSquare size={12} /> Direct Bid Channel
                 </button>

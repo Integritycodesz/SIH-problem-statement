@@ -9,6 +9,7 @@ export interface TranslationDict {
   mandiPricesTab: string;
   farmerProduceTab: string;
   marketplaceTab: string;
+  rfqTab: string;
   escrowContractsTab: string;
   disputesTab: string;
   switchPersona: string;
@@ -75,6 +76,7 @@ export interface TranslationDict {
   submitCounterOffer: string;
   acceptTermsSign: string;
   bidHistoryTitle: string;
+  backToMarketplace: string;
 
   // Mandi Intelligence
   mandiIntelTitle: string;
@@ -139,6 +141,7 @@ export const translations: Record<Language, TranslationDict> = {
     mandiPricesTab: 'Mandi Prices',
     farmerProduceTab: 'Farmer Produce',
     marketplaceTab: 'Marketplace',
+    rfqTab: 'Bilateral RFQ',
     escrowContractsTab: 'Escrow & Contracts',
     disputesTab: 'Help & Disputes',
     switchPersona: 'Switch SIH Persona:',
@@ -202,6 +205,7 @@ export const translations: Record<Language, TranslationDict> = {
     submitCounterOffer: 'Submit Counter Offer',
     acceptTermsSign: 'Accept Terms & Sign',
     bidHistoryTitle: 'Negotiation Audit Trail & Bid History',
+    backToMarketplace: 'Back to Marketplace',
 
     mandiIntelTitle: 'Mandi Price Intelligence',
     mandiIntelSubtitle: 'Real-time modal rates, arrival telemetry, and net realization across 585 APMC yards',
@@ -261,6 +265,7 @@ export const translations: Record<Language, TranslationDict> = {
     mandiPricesTab: 'बाजार भाव',
     farmerProduceTab: 'शेतकरी शेतमाल',
     marketplaceTab: 'घाऊक बाजारपेठ',
+    rfqTab: 'द्विपक्षीय वाटाघाटी',
     escrowContractsTab: 'एस्क्रो व करार',
     disputesTab: 'तक्रार निवारण',
     switchPersona: 'वापरकर्ता प्रोफाइल बदला:',
@@ -321,9 +326,10 @@ export const translations: Record<Language, TranslationDict> = {
     yourCounterBid: 'तुमची प्रति-मागणी (रु./क्विंटल)',
     totalDealValue: 'एकूण व्यवहार मूल्य',
     escrowAdvanceReq: '५०% एस्क्रो आगाऊ रक्कम आवश्यक',
-    submitCounterOffer: 'प्रति-मागणी सादर करा',
-    acceptTermsSign: 'अटी मान्य करा व स्वाक्षरी करा',
-    bidHistoryTitle: 'वाटाघाटी इतिहास व बिड नोंदी',
+    submitCounterOffer: 'प्रति-मागणी (Counter-Offer) सादर करा',
+    acceptTermsSign: 'अटी स्वीकारा व डिजिटल स्वाक्षरी करा',
+    bidHistoryTitle: 'वाटाघाटी इतिहास व बोलींचा क्रम',
+    backToMarketplace: 'मार्केटप्लेसवर परत जा',
 
     mandiIntelTitle: 'थेट कृषी उत्पन्न बाजार समिती भाव',
     mandiIntelSubtitle: 'महाराष्ट्रातील ५८५ बाजार समित्यांमधील दैनिक लिलाव दर, आवक आणि प्रत्यक्ष नफा',

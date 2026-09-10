@@ -8,6 +8,7 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import type {
   User,
+  UserRole,
   Mandi,
   CommodityPrice,
   ProduceLot,
@@ -24,6 +25,7 @@ import type {
 // Re-export all types so existing component imports continue working seamlessly
 export type {
   User,
+  UserRole,
   Mandi,
   CommodityPrice,
   ProduceLot,
@@ -518,6 +520,23 @@ export const api = {
       return FALLBACK_USERS.filter((u) => u.role === role);
     }
     return FALLBACK_USERS;
+  },
+
+  async createUser(userData: Partial<User>): Promise<User> {
+    const newUser: User = {
+      id: Math.floor(200 + Math.random() * 800),
+      name: userData.name || 'Verified User',
+      phone: userData.phone || '9876543210',
+      email: userData.email || 'user@agroconnect.in',
+      role: userData.role || 'FARMER',
+      district: userData.district || 'Nashik',
+      state: 'Maharashtra',
+      kyc_verified: true,
+      rating: 5.0,
+      created_at: new Date().toISOString()
+    };
+    FALLBACK_USERS.unshift(newUser);
+    return newUser;
   },
 
   // 5. Produce Lots

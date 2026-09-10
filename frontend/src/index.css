@@ -231,3 +231,76 @@ input:focus, select:focus, textarea:focus {
     padding: 0 12px 32px;
   }
 }
+
+/* Farmer Portal Split Layout: Big Active Harvest Lots & Thin Direct Institutional Buyers */
+.farmer-portal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .farmer-portal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Live APMC Infinite Ticker Marquee & Visual FX                              */
+/* -------------------------------------------------------------------------- */
+@keyframes tickerMarqueeAnimation {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.apmc-ticker-viewport {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  margin: 0 16px;
+  mask-image: linear-gradient(to right, transparent 0%, black 36px, black calc(100% - 36px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 36px, black calc(100% - 36px), transparent 100%);
+}
+
+.apmc-ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  width: max-content;
+  animation: tickerMarqueeAnimation 90s linear infinite;
+}
+
+.apmc-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+.live-pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: #10b981;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseLiveGreen 1.8s infinite;
+}
+
+@keyframes pulseLiveGreen {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    transform: scale(0.95);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
+    transform: scale(1.15);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    transform: scale(0.95);
+  }
+}
+

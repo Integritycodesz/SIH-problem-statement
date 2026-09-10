@@ -3,18 +3,39 @@ import { Header } from './components/Header';
 import { MandiIntelligence } from './components/MandiIntelligence';
 import { FarmerPortal } from './components/FarmerPortal';
 import { BuyerDiscovery } from './components/BuyerDiscovery';
+import { RFQNegotiationPortal } from './components/RFQNegotiationPortal';
 import { EscrowContractHub } from './components/EscrowContractHub';
 import { DisputePortal } from './components/DisputePortal';
-import { api, type User } from './services/api';
+import { AuthModal } from './components/AuthModal';
+import { api, type User, type ProduceLot } from './services/api';
 import { type Language } from './utils/i18n';
+import { Lock, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Initialize currentUser from localStorage (default to null / guest)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('agroconnect_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('buyer'); // Default to Marketplace
+  const [activeTab, setActiveTab] = useState<string>('intelligence'); // Default to public Mandi Prices
   const [lang, setLang] = useState<Language>('EN');
   const [disputeTargetContractId, setDisputeTargetContractId] = useState<number | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
+  const [negotiationLot, setNegotiationLot] = useState<ProduceLot | null>(null);
+
+  // Authentication State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalMessage, setAuthModalMessage] = useState<string>('');
+  const [pendingActionCallback, setPendingActionCallback] = useState<(() => void) | null>(null);
+  const [pendingTabAfterAuth, setPendingTabAfterAuth] = useState<string | null>(null);
+
+  const PROTECTED_TABS = ['buyer', 'rfq', 'contracts', 'disputes'];
 
   useEffect(() => {
     loadUsers();
@@ -24,17 +45,86 @@ export const App: React.FC = () => {
     try {
       const users = await api.getUsers();
       setAllUsers(users);
-      if (users.length > 0) {
-        const farmer = users.find(u => u.role === 'FARMER');
-        setCurrentUser(farmer || users[0]);
-      }
     } catch (e) {
       console.error('Error fetching users:', e);
     }
   };
 
-  const handleUserSelect = (user: User) => {
+  const getTabLabel = (tab: string): string => {
+    switch (tab) {
+      case 'intelligence': return lang === 'MR' ? 'बाजार भाव निर्देशांक' : 'Mandi Prices';
+      case 'farmer': return lang === 'MR' ? 'शेतकरी उत्पादन' : 'Farmer Produce';
+      case 'buyer': return lang === 'MR' ? 'थोक बाजारपेठ' : 'Wholesale Marketplace';
+      case 'rfq': return lang === 'MR' ? 'थेट द्विपक्षीय वाटाघाटी' : 'Bilateral RFQ Negotiation';
+      case 'contracts': return lang === 'MR' ? 'एस्क्रो व करार केंद्र' : 'Escrow & Smart Contracts';
+      case 'disputes': return lang === 'MR' ? 'मदत व लवाद निवारण' : 'Help & Grievance Arbitration';
+      default: return tab;
+    }
+  };
+
+  const handleSelectTab = (tab: string) => {
+    if (PROTECTED_TABS.includes(tab) && !currentUser) {
+      setAuthModalMessage(
+        lang === 'MR'
+          ? `${getTabLabel(tab)} पाहण्यासाठी कृपया अधिकृत लॉगिन किंवा नोंदणी करा.`
+          : `Authentication required to access ${getTabLabel(tab)}. Please sign in or register.`
+      );
+      setPendingTabAfterAuth(tab);
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setActiveTab(tab);
+  };
+
+  const handleRequireAuth = (message?: string, onComplete?: () => void) => {
+    if (currentUser) {
+      if (onComplete) onComplete();
+      return;
+    }
+    setAuthModalMessage(
+      message || (lang === 'MR' 
+        ? 'या कृतीसाठी अधिकृत लॉगिन आवश्यक आहे. कृपया लॉगिन करा.' 
+        : 'Authentication required to perform this action. Please sign in or register.')
+    );
+    setPendingActionCallback(() => onComplete || null);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
+    try {
+      localStorage.setItem('agroconnect_user', JSON.stringify(user));
+    } catch (e) {
+      console.warn('Could not save user to localStorage', e);
+    }
+    setIsAuthModalOpen(false);
+
+    // Execute pending action if any was requested
+    if (pendingActionCallback) {
+      const cb = pendingActionCallback;
+      setPendingActionCallback(null);
+      cb();
+    } else if (pendingTabAfterAuth) {
+      setActiveTab(pendingTabAfterAuth);
+      setPendingTabAfterAuth(null);
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('agroconnect_user');
+    } catch (e) {
+      console.warn('Could not remove user from localStorage', e);
+    }
+    // If on a protected tab, redirect to public Mandi Prices
+    if (PROTECTED_TABS.includes(activeTab)) {
+      setActiveTab('intelligence');
+    }
+  };
+
+  const handleUserSelect = (user: User) => {
+    handleLoginSuccess(user);
     if (user.role === 'FARMER') {
       setActiveTab('farmer');
     } else if (user.role === 'BUYER') {
@@ -46,15 +136,25 @@ export const App: React.FC = () => {
 
   const handleNavigateToDisputes = (contractId: number) => {
     setDisputeTargetContractId(contractId);
-    setActiveTab('disputes');
+    handleSelectTab('disputes');
   };
 
   const handleNavigateToContracts = (contractId?: number) => {
     if (contractId) {
       setSelectedContractId(contractId);
     }
-    setActiveTab('contracts');
+    handleSelectTab('contracts');
   };
+
+  const handleNavigateToNegotiation = (lot?: ProduceLot) => {
+    if (lot) {
+      setNegotiationLot(lot);
+    }
+    handleSelectTab('rfq');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const isCurrentTabProtected = PROTECTED_TABS.includes(activeTab) && !currentUser;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
@@ -64,45 +164,161 @@ export const App: React.FC = () => {
         allUsers={allUsers}
         onSelectUser={handleUserSelect}
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         lang={lang}
         onSelectLang={setLang}
+        onOpenAuthModal={() => {
+          setAuthModalMessage('');
+          setPendingActionCallback(null);
+          setPendingTabAfterAuth(null);
+          setIsAuthModalOpen(true);
+        }}
+        onLogout={handleLogout}
       />
 
       <main className="app-container" style={{ flex: 1 }}>
-        {activeTab === 'intelligence' && (
-          <MandiIntelligence lang={lang} />
-        )}
-        {activeTab === 'farmer' && (
-          <FarmerPortal 
-            currentUser={currentUser} 
-            onNavigateToRFQs={() => setActiveTab('buyer')} 
-            lang={lang}
-          />
-        )}
-        {activeTab === 'buyer' && (
-          <BuyerDiscovery 
-            currentUser={currentUser} 
-            onNavigateToContracts={handleNavigateToContracts} 
-            lang={lang}
-          />
-        )}
-        {activeTab === 'contracts' && (
-          <EscrowContractHub 
-            currentUser={currentUser} 
-            onNavigateToDisputes={handleNavigateToDisputes} 
-            initialContractId={selectedContractId}
-            lang={lang}
-          />
-        )}
-        {activeTab === 'disputes' && (
-          <DisputePortal 
-            currentUser={currentUser} 
-            initialContractId={disputeTargetContractId} 
-            lang={lang}
-          />
+        {/* If user lands on protected tab while unauthenticated, show Lock Screen Gate */}
+        {isCurrentTabProtected ? (
+          <div style={{ 
+            maxWidth: '600px', 
+            margin: '60px auto', 
+            backgroundColor: '#ffffff', 
+            border: '1px solid #e2e8f0', 
+            borderRadius: 'var(--radius-lg)', 
+            padding: '36px 30px', 
+            textAlign: 'center',
+            boxShadow: 'var(--shadow-md)'
+          }}>
+            <div style={{ 
+              width: '64px', 
+              height: '64px', 
+              borderRadius: '50%', 
+              backgroundColor: '#ecfdf5', 
+              color: '#059669', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              margin: '0 auto 16px' 
+            }}>
+              <Lock size={32} />
+            </div>
+
+            <div style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              backgroundColor: '#f1f5f9', 
+              color: '#475569', 
+              padding: '2px 10px', 
+              borderRadius: 'var(--radius-full)', 
+              fontSize: '0.72rem', 
+              fontWeight: 700,
+              marginBottom: '10px'
+            }}>
+              <ShieldCheck size={13} color="#059669" />
+              <span>MSAMB Protected Section</span>
+            </div>
+
+            <h3 style={{ fontSize: '1.4rem', color: '#0f172a', marginBottom: '8px' }}>
+              {lang === 'MR' ? 'प्रवेश प्रतिबंधित: लॉगिन आवश्यक' : 'Authentication Required'}
+            </h3>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '24px' }}>
+              {lang === 'MR' 
+                ? `"${getTabLabel(activeTab)}" विभागात थेट कायदेशीर करार व सुरक्षित व्यवहार समाविष्ट आहेत. कृपया पुढे जाण्यासाठी अधिकृत खात्यात प्रवेश करा.` 
+                : `The "${getTabLabel(activeTab)}" portal handles verified commercial bidding and legally-binding escrow settlements under Maharashtra APMC regulations. Please sign in or register to access.`
+              }
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                className="btn-gov-primary"
+                style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.9rem' }}
+                onClick={() => {
+                  setAuthModalMessage(`Please sign in to access ${getTabLabel(activeTab)}.`);
+                  setPendingTabAfterAuth(activeTab);
+                  setIsAuthModalOpen(true);
+                }}
+              >
+                <span>{lang === 'MR' ? 'लॉगिन किंवा नोंदणी करा' : 'Sign In / Register to Access'}</span>
+                <ArrowRight size={16} />
+              </button>
+
+              <button 
+                className="btn-gov-secondary"
+                style={{ width: '100%', justifyContent: 'center', padding: '10px', fontSize: '0.85rem' }}
+                onClick={() => setActiveTab('intelligence')}
+              >
+                <span>{lang === 'MR' ? 'सर्वजनिक बाजार भाव पहा' : 'Browse Public Mandi Prices'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'intelligence' && (
+              <MandiIntelligence 
+                lang={lang} 
+                currentUser={currentUser}
+                onRequireAuth={handleRequireAuth}
+              />
+            )}
+            {activeTab === 'farmer' && (
+              <FarmerPortal 
+                currentUser={currentUser} 
+                onNavigateToRFQs={(lot) => handleNavigateToNegotiation(lot)} 
+                lang={lang}
+                onRequireAuth={handleRequireAuth}
+              />
+            )}
+            {activeTab === 'buyer' && (
+              <BuyerDiscovery 
+                currentUser={currentUser} 
+                onNavigateToContracts={handleNavigateToContracts} 
+                onNavigateToNegotiation={handleNavigateToNegotiation}
+                lang={lang}
+              />
+            )}
+            {activeTab === 'rfq' && (
+              <RFQNegotiationPortal
+                currentUser={currentUser}
+                selectedLot={negotiationLot}
+                onNavigateToContracts={handleNavigateToContracts}
+                onBackToMarketplace={() => setActiveTab('buyer')}
+                lang={lang}
+              />
+            )}
+            {activeTab === 'contracts' && (
+              <EscrowContractHub 
+                currentUser={currentUser} 
+                onNavigateToDisputes={handleNavigateToDisputes} 
+                initialContractId={selectedContractId}
+                lang={lang}
+              />
+            )}
+            {activeTab === 'disputes' && (
+              <DisputePortal 
+                currentUser={currentUser} 
+                initialContractId={disputeTargetContractId} 
+                lang={lang}
+              />
+            )}
+          </>
         )}
       </main>
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setPendingActionCallback(null);
+          setPendingTabAfterAuth(null);
+        }}
+        onLoginSuccess={handleLoginSuccess}
+        allUsers={allUsers}
+        pendingMessage={authModalMessage}
+        lang={lang}
+      />
 
       {/* Footer */}
       <footer style={{ 
