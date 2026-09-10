@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS public.produce_lots (
     base_price_per_quintal NUMERIC(10, 2) NOT NULL,
     expected_delivery_days INT DEFAULT 3,
     description TEXT,
-    status VARCHAR(30) DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'UNDER_NEGOTIATION', 'CONTRACTED', 'DELIVERED')),
+    status VARCHAR(30) DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'UNDER_NEGOTIATION', 'UNDER_CONTRACT', 'CONTRACTED', 'DELIVERED')),
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
 );
 

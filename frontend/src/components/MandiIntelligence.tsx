@@ -174,9 +174,14 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({ lang = 'EN
     return matchesCrop && matchesSearch;
   });
 
-  // Selected Mandi for Calculator
+  // Top gainer
+  const topGainer = [...prices].sort((a, b) => (b.change_24h || 0) - (a.change_24h || 0))[0] || prices[0];
+
+  // Dynamic calculations for transport
   const currentCalcMandi = priceItems.find(p => p.id === selectedMandiId) || priceItems[0];
-  const ratePerQtl = currentCalcMandi.modal_price;
+  const destMandiObj = mandis.find(m => m.id === destMandiId) || mandis[0] || { name: 'Lasalgaon APMC', district: 'Nashik' };
+  const destPriceRecord = prices.find(p => p.mandi_id === destMandiId) || prices[0];
+  const ratePerQtl = destPriceRecord?.modal_price || currentCalcMandi?.modal_price || 2450;
   const grossRealization = harvestQty * ratePerQtl;
 
   // Realistic freight calculation based on distance and vehicle
@@ -839,9 +844,22 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({ lang = 'EN
                 <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   SETTLEMENT BREAKDOWN
                 </span>
-                <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={13} /> Escrow Guaranteed
+                <span style={{ 
+                  fontSize: '0.72rem', 
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: transportResult?.viability_status === 'HIGHLY_VIABLE' ? '#ecfdf5' : '#fffbeb',
+                  color: transportResult?.viability_status === 'HIGHLY_VIABLE' ? '#065f46' : '#b45309'
+                }}>
+                  {transportResult?.viability_status === 'HIGHLY_VIABLE' ? '● HIGH ARBITRAGE GAIN' : '● MARGINAL VIABILITY'}
                 </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.84rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#475569' }}>Gross Realization ({destMandiObj?.name || 'Selected Mandi'} @ ₹{ratePerQtl}/qtl)</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{grossRealization.toLocaleString()}</span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
