@@ -92,6 +92,30 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   const [selectedScorecard, setSelectedScorecard] = useState<BuyerReliabilityScorecard | null>(null);
   const [showScorecardModal, setShowScorecardModal] = useState<boolean>(false);
 
+  // Gap 4: AI Matchmaker State
+  const [matchesPerLot, setMatchesPerLot] = useState<Record<number, BuyerMatch[]>>({});
+  const [expandedMatchLotId, setExpandedMatchLotId] = useState<number | null>(null);
+  const [pitchTargetLot, setPitchTargetLot] = useState<ProduceLot | null>(null);
+  const [pitchTargetBuyer, setPitchTargetBuyer] = useState<BuyerMatch | null>(null);
+  const [pitchPrice, setPitchPrice] = useState<number | ''>('');
+  const [pitchCustomMsg, setPitchCustomMsg] = useState<string>('');
+  const [isPitching, setIsPitching] = useState<boolean>(false);
+
+  // Gap 5: Logistics & Transit Gate Pass State
+  const [showLogisticsModal, setShowLogisticsModal] = useState<boolean>(false);
+  const [activeLogisticsBooking, setActiveLogisticsBooking] = useState<LogisticsBooking | null>(null);
+  const [logisticsModalTab, setLogisticsModalTab] = useState<'PROGRESSION' | 'E_GATE_PASS' | 'BOOK_TRUCK'>('PROGRESSION');
+  const [isUpdatingTransit, setIsUpdatingTransit] = useState<boolean>(false);
+  const [bookTransporterName, setBookTransporterName] = useState<string>('Mahatruck Krishi Logistics Federation');
+  const [bookVehicleNo, setBookVehicleNo] = useState<string>('MH-12-RN-8821');
+  const [bookVehicleType, setBookVehicleType] = useState<string>('10-Ton Eicher Pro (120 Qtl Capacity)');
+  const [bookDriverName, setBookDriverName] = useState<string>('Tukaram Gaikwad');
+  const [bookDriverPhone, setBookDriverPhone] = useState<string>('+91 98224 88210');
+  const [bookPickupLocation, setBookPickupLocation] = useState<string>('Latur APMC Yard / Farmgate Hub');
+  const [bookDeliveryLocation, setBookDeliveryLocation] = useState<string>('ADM Agro MIDC Processing Silo, Latur');
+  const [bookNetWeight, setBookNetWeight] = useState<number | ''>(120);
+  const [isBookingTruck, setIsBookingTruck] = useState<boolean>(false);
+
   useEffect(() => {
     loadData();
   }, [currentUser]);
@@ -134,7 +158,21 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     else if (result.grade_code === 'B') setNewGrade('Grade B');
     else setNewGrade('Grade B');
     setNewMoisture(result.estimated_moisture_percent);
-    setLotSuccessMsg(`✓ Kisan Vision Assay Applied: ${result.predicted_grade} (${result.estimated_moisture_percent}% moisture, Cert #${result.assay_id})`);
+
+    api.saveQualityAssay({
+      certificate_id: result.assay_id,
+      farmer_id: currentUser?.id || null,
+      commodity: result.commodity,
+      variety: result.sample_name || 'Standard Grade',
+      overall_grade: result.predicted_grade,
+      moisture_percent: result.estimated_moisture_percent,
+      color_uniformity_score: result.uniformity_score || 94.0,
+      defect_percentage: result.blemish_percentage || 2.5,
+      purity_index: result.confidence_score || 98.0,
+      sample_image_url: result.image_url || ''
+    }).catch(e => console.warn('[FarmerPortal] Assay save notice:', e));
+
+    setLotSuccessMsg(`✓ Kisan Vision Assay Applied & Logged: ${result.predicted_grade} (${result.estimated_moisture_percent}% moisture, Cert #${result.assay_id})`);
     setTimeout(() => setLotSuccessMsg(''), 5000);
   };
 
@@ -410,6 +448,20 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
             }}
           >
             <MessageSquare size={14} /> {t.viewOffers} ({activeInquiriesCount})
+          </button>
+          <button 
+            className="btn-gov-secondary"
+            onClick={() => setShowLogisticsModal(true)}
+            style={{ 
+              backgroundColor: showLogisticsModal ? '#eff6ff' : '#ffffff',
+              borderColor: showLogisticsModal ? '#93c5fd' : 'var(--border-card)',
+              color: showLogisticsModal ? '#1d4ed8' : '#334155',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Truck size={14} color="#2563eb" /> {lang === 'MR' ? 'वाहतूक व ई-गेट पास' : 'Logistics & Gate Pass'}
           </button>
 
           <button 
@@ -926,6 +978,180 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     </div>
                   </div>
 
+                  {/* GAP 4: AUTOMATED AI BUYER MATCHMAKING ENGINE */}
+                  {(() => {
+                    const matches = matchesPerLot[lot.id] || [];
+                    const topMatch = matches[0];
+                    const isExpanded = expandedMatchLotId === lot.id;
+                    const displayMatches = isExpanded ? matches : matches.slice(0, 2);
+
+                    return (
+                      <div style={{ 
+                        backgroundColor: '#f0fdf4', 
+                        border: '1px solid #bbf7d0', 
+                        borderRadius: 'var(--radius-sm)', 
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        {/* Header with Top Match % Pill */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ 
+                              width: '26px', 
+                              height: '26px', 
+                              borderRadius: '50%', 
+                              backgroundColor: '#059669', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              color: '#ffffff' 
+                            }}>
+                              <Sparkles size={14} />
+                            </div>
+                            <div>
+                              <strong style={{ fontSize: '0.86rem', color: '#065f46' }}>
+                                {matches.length} {lang === 'MR' ? 'पडताळणी केलेले खरेदीदार मॅच झाले' : 'Verified Buyers Matched for Your'} {lot.commodity} {lot.variety ? `(${lot.variety})` : ''} Lot
+                              </strong>
+                              <div style={{ fontSize: '0.7rem', color: '#047857' }}>
+                                {lang === 'MR' ? 'अंतराचे निकष, आर्द्रता हमी व थेट खरेदीदारांच्या बोलींवर आधारित एआय स्कोर' : 'Ranked via Haversine distance, NABL assay specs, and pre-funded escrow standing bids'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {topMatch && (
+                              <span style={{ 
+                                backgroundColor: '#059669', 
+                                color: '#ffffff', 
+                                fontSize: '0.72rem', 
+                                fontWeight: 800, 
+                                padding: '3px 9px', 
+                                borderRadius: '12px',
+                                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                              }}>
+                                Top: {topMatch.match_score}% Match
+                              </span>
+                            )}
+                            {matches.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedMatchLotId(isExpanded ? null : lot.id)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#047857',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  textDecoration: 'underline'
+                                }}
+                              >
+                                {isExpanded 
+                                  ? (lang === 'MR' ? 'कमी माहिती ▴' : 'Show Less ▴') 
+                                  : (lang === 'MR' ? `सर्व ${matches.length} खरेदीदार ▾` : `Show All (${matches.length}) ▾`)}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Matched Buyer Cards Grid */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {displayMatches.map(match => (
+                            <div 
+                              key={match.buyer_id}
+                              style={{ 
+                                backgroundColor: '#ffffff', 
+                                border: '1px solid #e2e8f0', 
+                                borderRadius: 'var(--radius-xs)', 
+                                padding: '10px 12px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{match.company_name}</strong>
+                                  <span style={{ 
+                                    backgroundColor: match.match_score >= 95 ? '#dcfce7' : '#e0f2fe', 
+                                    color: match.match_score >= 95 ? '#15803d' : '#0369a1', 
+                                    border: `1px solid ${match.match_score >= 95 ? '#86efac' : '#7dd3fc'}`,
+                                    fontSize: '0.7rem', 
+                                    fontWeight: 800, 
+                                    padding: '1px 6px', 
+                                    borderRadius: '4px' 
+                                  }}>
+                                    {match.match_score}% Match
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    • {match.distance_km} km away ({match.district})
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.74rem', color: '#475569', flexWrap: 'wrap' }}>
+                                  <span>
+                                    Standing Bid: <strong style={{ color: '#059669', fontSize: '0.82rem' }}>₹{match.standing_bid_price.toLocaleString()}/qtl</strong>
+                                    {match.price_difference > 0 && (
+                                      <span style={{ color: '#059669', fontWeight: 700, marginLeft: '4px' }}>
+                                        (+₹{match.price_difference} over ask)
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span style={{ color: '#cbd5e1' }}>|</span>
+                                  <span>Moisture Spec: <strong>≤{match.moisture_spec_max}%</strong></span>
+                                  <span style={{ color: '#cbd5e1' }}>|</span>
+                                  <span style={{ color: '#0284c7', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <ShieldCheck size={12} /> Escrow Verified
+                                  </span>
+                                </div>
+
+                                {/* Match highlight tags */}
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                  {match.match_reasons.slice(0, 2).map((reason, rIdx) => (
+                                    <span 
+                                      key={rIdx}
+                                      style={{ 
+                                        backgroundColor: '#f1f5f9', 
+                                        color: '#334155', 
+                                        fontSize: '0.66rem', 
+                                        padding: '1px 6px', 
+                                        borderRadius: '3px',
+                                        fontWeight: 500
+                                      }}
+                                    >
+                                      ✓ {reason}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* 1-Click Send Direct Lot Pitch Action */}
+                              <button
+                                className="btn-gov-primary"
+                                style={{ 
+                                  padding: '7px 14px', 
+                                  fontSize: '0.76rem', 
+                                  backgroundColor: '#059669',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                onClick={() => handleOpenPitchModal(lot, match)}
+                              >
+                                <Send size={13} /> {t.pitchLotBtn}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Action Footer */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
@@ -933,6 +1159,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     </span>
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button 
+                        className="btn-gov-secondary" 
+                        style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', borderColor: '#bfdbfe', color: '#1d4ed8', backgroundColor: '#eff6ff' }}
+                        onClick={() => handleOpenLogisticsForLot(lot)}
+                      >
+                        <Truck size={13} /> {lang === 'MR' ? 'वाहतूक व ई-गेट पास' : 'Logistics & Gate Pass'}
+                      </button>
                       {/* Remove / Delist Lot Action */}
                       {canInitiateDelete && (
                         <button 

@@ -3,7 +3,7 @@ import {
   FileText, ShieldCheck, Lock, 
   Truck, DollarSign, AlertTriangle, Key, UserCheck, CheckCircle2, Scale, QrCode
 } from 'lucide-react';
-import { api, type User, type Contract } from '../services/api';
+import { api, type User, type Contract, type LogisticsBooking } from '../services/api';
 import { translations, type Language } from '../utils/i18n';
 import { QualityRefractionModal } from './QualityRefractionModal';
 import { DigitalGatePassModal } from './DigitalGatePassModal';
@@ -32,10 +32,22 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   const [gatePassModalOpen, setGatePassModalOpen] = useState<boolean>(false);
   const [truckloadModalOpen, setTruckloadModalOpen] = useState<boolean>(false);
   const [rolePerspective, setRolePerspective] = useState<'AUTO' | 'FARMER' | 'BUYER' | 'ADMIN'>('AUTO');
+  const [contractLogistics, setContractLogistics] = useState<LogisticsBooking | null>(null);
+  const [showGatePassModal, setShowGatePassModal] = useState<boolean>(false);
 
   useEffect(() => {
     loadContracts();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (selectedContract) {
+      api.getLogisticsBooking(selectedContract.id)
+        .then(booking => setContractLogistics(booking))
+        .catch(() => setContractLogistics(null));
+    } else {
+      setContractLogistics(null);
+    }
+  }, [selectedContract]);
 
   useEffect(() => {
     if (initialContractId && contracts.length > 0) {
@@ -395,6 +407,45 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Transit Logistics & Gate Pass Badge */}
+              {contractLogistics && (
+                <div style={{ 
+                  backgroundColor: '#f0fdf4', 
+                  border: '1px solid #bbf7d0', 
+                  borderRadius: 'var(--radius-xs)', 
+                  padding: '10px 12px', 
+                  marginTop: '10px', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  flexWrap: 'wrap', 
+                  gap: '8px' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#059669', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Truck size={14} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#065f46' }}>
+                        {contractLogistics.vehicle_number} ({contractLogistics.vehicle_type}) • Driver: {contractLogistics.driver_name}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#047857' }}>
+                        APMC e-Gate Pass: <strong>#{contractLogistics.gate_pass_code}</strong> • Status: <strong style={{ color: '#059669' }}>{contractLogistics.status.replace(/_/g, ' ')}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn-gov-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.72rem', borderColor: '#059669', color: '#065f46', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    onClick={() => setShowGatePassModal(true)}
+                  >
+                    <FileText size={12} /> View e-Gate Pass & QR
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Financial Breakdown Cards */}
