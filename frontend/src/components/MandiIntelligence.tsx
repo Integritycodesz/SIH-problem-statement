@@ -6,7 +6,7 @@ import {
   Truck, ArrowUpRight, ArrowDownRight, Clock,
   Globe, RefreshCw, Download, Key, CheckCircle2, Building2, X,
   Scale, AlertTriangle, Volume2, VolumeX, Sparkles, Send,
-  Compass, Tag, Zap
+  Compass, Tag, Zap, Users
 } from 'lucide-react';
 import { subscribeToCommodityPrices } from '../services/supabase';
 import { api, type CommodityPrice, type GovMandiRecord, type CACPMSPRecord } from '../services/api';
@@ -124,6 +124,7 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [forecastView, setForecastView] = useState<'AI_FORECAST' | 'HISTORY'>('AI_FORECAST');
   const [arbitrageOrigin, setArbitrageOrigin] = useState<string>('Nashik');
+  const [isFpoPooling, setIsFpoPooling] = useState<boolean>(false);
   const [whatsAppFeedbackMsg, setWhatsAppFeedbackMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -430,20 +431,93 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   const ratePerQtl = currentCalcMandi.modal_price;
   const grossRealization = harvestQty * ratePerQtl;
 
-  // Realistic freight calculation based on distance and vehicle
+  // Selected vehicle capacity and trip count
+  const vehicleCapacity = selectedVehicle.includes('25') ? 25 : selectedVehicle.includes('50') ? 50 : 100;
+  const tripsNeeded = Math.ceil(harvestQty / vehicleCapacity);
+
   let vehicleFactor = 1.0;
   if (selectedVehicle.includes('Mini Truck')) vehicleFactor = 1.25;
   else if (selectedVehicle.includes('10-Wheeler')) vehicleFactor = 0.85;
 
-  // Base freight calculation matching screenshot values
-  const distanceKm = currentCalcMandi.distance_km;
-  const freightDeduction = Math.round(
-    (distanceKm * 0.77 * (harvestQty / 10) * vehicleFactor + (harvestQty * 35))
-  );
+  // Real Dynamic Haul Distance based on Farmer's Selected Origin Tehsil/District
+  const distanceKm = React.useMemo(() => {
+    return api.calculateMandiDistance(
+      arbitrageOrigin, 
+      currentCalcMandi.mandi_name, 
+      currentCalcMandi.location_desc
+    );
+  }, [arbitrageOrigin, currentCalcMandi.mandi_name, currentCalcMandi.location_desc]);
+
+  // Haul freight: ₹70/qtl per 100km verified tariff
+  const haulPerQtl = (distanceKm / 100) * 70 * vehicleFactor;
+  // Standard haul freight with trip multiplier
+  const standardHaulFreight = Math.round(harvestQty * haulPerQtl * (tripsNeeded > 1 ? (1 + (tripsNeeded - 1) * 0.75) : 1.0));
+  
+  // FPO Shared Freight Pooling: 45% logistics savings via cooperative backhaul aggregation
+  const haulFreight = isFpoPooling ? Math.round(standardHaulFreight * 0.55) : standardHaulFreight;
+  const fpoSavings = standardHaulFreight - haulFreight;
+
+  const handlingLoading = Math.round(harvestQty * 15); // ₹15/qtl terminal hamali & weighing
+  const freightDeduction = haulFreight + handlingLoading;
   
   // Govt Cess & Mandi Handling (1.8%)
   const mandiHandling = Math.round(grossRealization * 0.018);
-  const netInHand = grossRealization - freightDeduction - mandiHandling;
+  const netInHand = Math.max(0, grossRealization - freightDeduction - mandiHandling);
+
+  // Waterfall Rupee Flow Percentage Allocations
+  const pctNet = grossRealization > 0 ? Math.round((netInHand / grossRealization) * 1000) / 10 : 0;
+  const pctFreight = grossRealization > 0 ? Math.round((freightDeduction / grossRealization) * 1000) / 10 : 0;
+  const pctCess = grossRealization > 0 ? Math.max(0, Math.round((100 - pctNet - pctFreight) * 10) / 10) : 0;
+
+  // Multi-Mandi Real-Time Arbitrage Comparison (Top APMCs for Current Crop)
+  const multiMandiAlternatives = React.useMemo(() => {
+    const targetCrop = (currentCalcMandi?.commodity || activeCommodityName || 'Onion').toLowerCase();
+    
+    // Find matching APMCs for this commodity
+    const matches = priceItems.filter(p => {
+      const pc = p.commodity.toLowerCase();
+      const pcat = p.category.toLowerCase();
+      return pc.includes(targetCrop) || targetCrop.includes(pc) || pcat.includes(targetCrop);
+    });
+
+    // If fewer than 2 matches, fall back to priceItems
+    const candidates = matches.length >= 2 ? matches : priceItems;
+
+    // Deduplicate by mandi_name
+    const uniqueMap = new Map<string, APMCPriceItem>();
+    for (const item of candidates) {
+      if (!uniqueMap.has(item.mandi_name)) {
+        uniqueMap.set(item.mandi_name, item);
+      }
+    }
+
+    const calculated = Array.from(uniqueMap.values()).map(item => {
+      const dist = api.calculateMandiDistance(arbitrageOrigin, item.mandi_name, item.location_desc);
+      const itemHaulPerQtl = (dist / 100) * 70 * vehicleFactor;
+      const itemStdHaul = Math.round(harvestQty * itemHaulPerQtl * (tripsNeeded > 1 ? (1 + (tripsNeeded - 1) * 0.75) : 1.0));
+      const itemHaul = isFpoPooling ? Math.round(itemStdHaul * 0.55) : itemStdHaul;
+      const itemFreight = itemHaul + Math.round(harvestQty * 15);
+      const itemGross = harvestQty * item.modal_price;
+      const itemCess = Math.round(itemGross * 0.018);
+      const itemNet = Math.max(0, itemGross - itemFreight - itemCess);
+
+      return {
+        item,
+        distanceKm: dist,
+        modalPrice: item.modal_price,
+        grossRealization: itemGross,
+        totalLogistics: itemFreight,
+        mandiCess: itemCess,
+        netPayout: itemNet,
+        diffVsCurrent: itemNet - netInHand,
+        isCurrentMandi: item.id === currentCalcMandi.id || item.mandi_name === currentCalcMandi.mandi_name
+      };
+    });
+
+    // Sort by highest net take-home payout
+    calculated.sort((a, b) => b.netPayout - a.netPayout);
+    return calculated.slice(0, 3);
+  }, [priceItems, currentCalcMandi, activeCommodityName, arbitrageOrigin, vehicleFactor, harvestQty, tripsNeeded, isFpoPooling, netInHand]);
 
   const handleSelectMandiForCalc = (item: APMCPriceItem) => {
     setSelectedFocusCommodity(item.commodity);
@@ -506,9 +580,22 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
     return currentCalcMandi?.modal_price || 2450;
   }, [feedSource, filteredGovPrices, priceItems, currentCalcMandi, activeCommodityName]);
 
-  const mspBenchmarkFloor = activeMspRecord 
-    ? activeMspRecord.msp_price 
-    : (api.getMSPFloorPrice(activeCommodityName)?.msp_price || 2425);
+  // Dynamic MSP Benchmark linked directly to the selected mandi's crop (e.g. Soybean, Cotton, Wheat)
+  const calcCommodity = currentCalcMandi?.commodity || currentCalcMandi?.category || activeCommodityName;
+  const calcMspRecord = React.useMemo(() => {
+    return api.getMSPFloorPrice(calcCommodity) ||
+      mspRecords.find(m => {
+        const mc = m.commodity.toLowerCase();
+        const cc = calcCommodity.toLowerCase();
+        return cc.includes(mc) || mc.includes(cc);
+      }) ||
+      api.getMSPFloorPrice(activeCommodityName) ||
+      null;
+  }, [calcCommodity, activeCommodityName, mspRecords]);
+
+  const mspBenchmarkFloor = calcMspRecord 
+    ? calcMspRecord.msp_price 
+    : (api.getMSPFloorPrice(calcCommodity)?.msp_price || api.getMSPFloorPrice(activeCommodityName)?.msp_price || 2425);
   const mspPremiumDelta = Number((((currentBenchmarkRate - mspBenchmarkFloor) / mspBenchmarkFloor) * 100).toFixed(1));
   const isAboveMsp = mspPremiumDelta >= 0;
 
@@ -2468,9 +2555,38 @@ https://agroconnect.gov.in`;
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '26px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '26px' }}>
           {/* Left Inputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Origin Farm / Tehsil Hub Selector */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
+                <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <MapPin size={14} color="#059669" /> FARM ORIGIN LOCATION (MAHARASHTRA)
+                </span>
+                <span style={{ color: '#059669', fontSize: '0.72rem', fontWeight: 600 }}>GPS Distance Linked</span>
+              </div>
+              <select
+                value={arbitrageOrigin}
+                onChange={(e) => setArbitrageOrigin(e.target.value)}
+                style={{ 
+                  width: '100%', 
+                  padding: '9px 12px', 
+                  fontSize: '0.84rem', 
+                  fontWeight: 600, 
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                {Object.entries(api.MAHARASHTRA_DISTRICT_COORDS).map(([district, meta]) => (
+                  <option key={district} value={district}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
                 <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>HARVEST QUANTITY FOR DISPATCH</span>
@@ -2479,9 +2595,18 @@ https://agroconnect.gov.in`;
               <div style={{ display: 'flex' }}>
                 <input 
                   type="number" 
-                  min={5}
+                  min={1}
                   value={harvestQty}
-                  onChange={(e) => setHarvestQty(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => {
+                    const qty = Math.max(1, Number(e.target.value));
+                    setHarvestQty(qty);
+                    // Auto-upgrade vehicle tier if quantity exceeds smaller truck payload
+                    if (qty > 50 && selectedVehicle !== '10-Wheeler (100 Qtl)') {
+                      setSelectedVehicle('10-Wheeler (100 Qtl)');
+                    } else if (qty > 25 && qty <= 50 && selectedVehicle === 'Mini Truck (25 Qtl)') {
+                      setSelectedVehicle('6-Wheeler (50 Qtl)');
+                    }
+                  }}
                   style={{ 
                     flex: 1, 
                     borderTopRightRadius: 0, 
@@ -2499,7 +2624,7 @@ https://agroconnect.gov.in`;
                   borderTopRightRadius: 'var(--radius-sm)', 
                   borderBottomRightRadius: 'var(--radius-sm)', 
                   fontSize: '0.82rem', 
-                  fontWeight: 600,
+                  fontWeight: 600, 
                   color: '#475569' 
                 }}>
                   Quintals
@@ -2507,14 +2632,21 @@ https://agroconnect.gov.in`;
               </div>
             </div>
 
-            {/* Vehicle Options */}
+            {/* Vehicle Options with Payload & Trip Counter */}
             <div style={{ display: 'flex', gap: '8px' }}>
-              {['Mini Truck (25 Qtl)', '6-Wheeler (50 Qtl)', '10-Wheeler (100 Qtl)'].map(v => {
-                const isChosen = selectedVehicle === v;
+              {[
+                { name: 'Mini Truck (25 Qtl)', capacity: 25 },
+                { name: '6-Wheeler (50 Qtl)', capacity: 50 },
+                { name: '10-Wheeler (100 Qtl)', capacity: 100 }
+              ].map(v => {
+                const isChosen = selectedVehicle === v.name;
+                const isUndersized = harvestQty > v.capacity;
+                const trips = Math.ceil(harvestQty / v.capacity);
                 return (
                   <button
-                    key={v}
-                    onClick={() => setSelectedVehicle(v)}
+                    key={v.name}
+                    type="button"
+                    onClick={() => setSelectedVehicle(v.name)}
                     style={{
                       flex: 1,
                       padding: '8px 6px',
@@ -2523,11 +2655,25 @@ https://agroconnect.gov.in`;
                       borderRadius: 'var(--radius-sm)',
                       backgroundColor: isChosen ? '#ecfdf5' : '#ffffff',
                       color: isChosen ? '#065f46' : '#475569',
-                      border: isChosen ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                      cursor: 'pointer'
+                      border: isChosen ? '2px solid #059669' : '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      transition: 'all 0.15s ease'
                     }}
                   >
-                    {v}
+                    <span>{v.name}</span>
+                    {isUndersized ? (
+                      <span style={{ fontSize: '0.64rem', color: '#b45309', fontWeight: 600 }}>
+                        ({trips} trips needed)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.64rem', color: '#059669', fontWeight: 600 }}>
+                        (Fits 1 trip)
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -2539,15 +2685,25 @@ https://agroconnect.gov.in`;
                 DESTINATION APMC MARKET
               </label>
               <select 
-                value={selectedMandiId} 
-                onChange={(e) => setSelectedMandiId(Number(e.target.value))}
+                value={selectedMandiId || currentCalcMandi.id} 
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setSelectedMandiId(id);
+                  const selected = priceItems.find(p => p.id === id);
+                  if (selected) {
+                    setSelectedFocusCommodity(selected.commodity);
+                  }
+                }}
                 style={{ width: '100%', padding: '9px 12px', fontSize: '0.84rem', fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
               >
-                {priceItems.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.mandi_name} (₹{p.modal_price.toLocaleString()}/qtl • ~{p.distance_km} km haul)
-                  </option>
-                ))}
+                {priceItems.map(p => {
+                  const dist = api.calculateMandiDistance(arbitrageOrigin, p.mandi_name, p.location_desc);
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {p.mandi_name} • {p.commodity} (₹{p.modal_price.toLocaleString()}/qtl • ~{dist} km haul from {arbitrageOrigin})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -2565,7 +2721,67 @@ https://agroconnect.gov.in`;
               fontWeight: 600
             }}>
               <Truck size={16} color="#059669" />
-              <span>Verified Fleet Rate: ₹70/qtl per 100km tariff with GPS-tracked convoy.</span>
+              <span>
+                Verified Fleet Tariff: <strong>₹70/qtl per 100km</strong> haul + <strong>₹15/qtl</strong> terminal hamali with GPS-tracked convoy.
+              </span>
+            </div>
+
+            {/* FPO Shared Freight Pooling ("Milk-Run" Logistics) Toggle */}
+            <div 
+              onClick={() => setIsFpoPooling(!isFpoPooling)}
+              style={{
+                border: isFpoPooling ? '2px solid #059669' : '1px solid #cbd5e1',
+                backgroundColor: isFpoPooling ? '#f0fdf4' : '#f8fafc',
+                borderRadius: 'var(--radius-sm)',
+                padding: '12px 14px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  backgroundColor: isFpoPooling ? '#dcfce7' : '#e2e8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: isFpoPooling ? '#059669' : '#64748b'
+                }}>
+                  <Users size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isFpoPooling ? '#065f46' : '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>FPO Shared Freight Pooling</span>
+                    <span style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 700,
+                      backgroundColor: isFpoPooling ? '#059669' : '#e2e8f0',
+                      color: isFpoPooling ? '#ffffff' : '#64748b',
+                      padding: '1px 7px',
+                      borderRadius: '10px'
+                    }}>
+                      45% Cheaper
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: isFpoPooling ? '#15803d' : '#64748b', marginTop: '2px' }}>
+                    {isFpoPooling 
+                      ? `🎉 Active: Load aggregated with nearby FPO clusters. Saved ₹${fpoSavings.toLocaleString()} in haulage!`
+                      : 'Share truck capacity with nearby FPOs along the same highway route to slash freight costs.'}
+                  </div>
+                </div>
+              </div>
+              <input 
+                type="checkbox"
+                checked={isFpoPooling}
+                onChange={() => {}} // Handled by container click
+                style={{ width: '18px', height: '18px', accentColor: '#059669', cursor: 'pointer' }}
+              />
             </div>
           </div>
 
@@ -2599,7 +2815,18 @@ https://agroconnect.gov.in`;
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    Aggregated Freight Deduction <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>ⓘ</span>
+                    Aggregated Freight Deduction 
+                    {isFpoPooling && (
+                      <span style={{ fontSize: '0.66rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                        FPO Pooled -45%
+                      </span>
+                    )}
+                    <span 
+                      title={`Haul (₹70/qtl/100km): ₹${haulFreight.toLocaleString()} + Terminal Hamali (₹15/qtl): ₹${handlingLoading.toLocaleString()}${tripsNeeded > 1 ? ` (${tripsNeeded} vehicle trips)` : ''}${isFpoPooling ? ` • FPO discount saved ₹${fpoSavings.toLocaleString()}` : ''}`}
+                      style={{ color: '#0284c7', fontSize: '0.74rem', cursor: 'help', fontWeight: 700 }}
+                    >
+                      ⓘ
+                    </span>
                   </span>
                   <span style={{ fontWeight: 800, color: '#b91c1c' }}>-₹{freightDeduction.toLocaleString()}</span>
                 </div>
@@ -2607,6 +2834,74 @@ https://agroconnect.gov.in`;
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
                   <span>Govt Cess & Mandi Handling (1.8%)</span>
                   <span style={{ fontWeight: 800, color: '#b91c1c' }}>-₹{mandiHandling.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Rupee Flow (Waterfall Allocation) Bar */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              padding: '12px 14px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.72rem', fontWeight: 700 }}>
+                <span style={{ color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  RUPEE REALIZATION ALLOCATION
+                </span>
+                <span style={{ color: '#059669', fontWeight: 800 }}>
+                  {pctNet}% Direct to Farmer Bank
+                </span>
+              </div>
+
+              {/* Segmented Waterfall Distribution Bar */}
+              <div style={{
+                height: '14px',
+                width: '100%',
+                borderRadius: '7px',
+                overflow: 'hidden',
+                display: 'flex',
+                backgroundColor: '#e2e8f0'
+              }}>
+                <div 
+                  title={`Farmer Net In-Hand: ${pctNet}% (₹${netInHand.toLocaleString()})`}
+                  style={{ 
+                    width: `${pctNet}%`, 
+                    backgroundColor: '#059669', 
+                    transition: 'width 0.3s ease' 
+                  }} 
+                />
+                <div 
+                  title={`Freight & Logistics: ${pctFreight}% (₹${freightDeduction.toLocaleString()})`}
+                  style={{ 
+                    width: `${pctFreight}%`, 
+                    backgroundColor: '#ef4444', 
+                    transition: 'width 0.3s ease' 
+                  }} 
+                />
+                <div 
+                  title={`APMC Mandi Cess & Handling: ${pctCess}% (₹${mandiHandling.toLocaleString()})`}
+                  style={{ 
+                    width: `${pctCess}%`, 
+                    backgroundColor: '#f59e0b', 
+                    transition: 'width 0.3s ease' 
+                  }} 
+                />
+              </div>
+
+              {/* Waterfall Legend */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.68rem', color: '#64748b', flexWrap: 'wrap', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669', display: 'inline-block' }} />
+                  <span>Farmer In-Hand: <strong>{pctNet}%</strong> (₹{netInHand.toLocaleString()})</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                  <span>Logistics: <strong>{pctFreight}%</strong> (₹{freightDeduction.toLocaleString()})</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'inline-block' }} />
+                  <span>APMC Cess: <strong>{pctCess}%</strong> (₹{mandiHandling.toLocaleString()})</span>
                 </div>
               </div>
             </div>
@@ -2641,6 +2936,7 @@ https://agroconnect.gov.in`;
               const netRatePerQtl = Math.round(netInHand / harvestQty);
               const mspDiff = netRatePerQtl - mspBenchmarkFloor;
               const isAbove = mspDiff >= 0;
+              const cropLabel = calcMspRecord?.commodity || calcCommodity;
               return (
                 <div style={{
                   padding: '10px 14px',
@@ -2657,11 +2953,11 @@ https://agroconnect.gov.in`;
                     <span style={{ fontWeight: 700, color: isAbove ? '#065f46' : '#92400e' }}>
                       Net Rate: ₹{netRatePerQtl.toLocaleString()}/qtl
                     </span>
-                    <span style={{ color: '#64748b' }}> • CACP MSP Floor: ₹{mspBenchmarkFloor.toLocaleString()}/qtl</span>
+                    <span style={{ color: '#64748b' }}> • CACP MSP Floor ({cropLabel}): ₹{mspBenchmarkFloor.toLocaleString()}/qtl</span>
                     <div style={{ fontSize: '0.7rem', color: isAbove ? '#15803d' : '#b45309', marginTop: '2px' }}>
                       {isAbove 
-                        ? `✓ Surplus ₹${mspDiff.toLocaleString()}/qtl above CACP statutory floor protected via Escrow`
-                        : `⚠️ Net realization is ₹${Math.abs(mspDiff).toLocaleString()}/qtl below MSP due to freight. Consider selling locally or via NAFED.`}
+                        ? `✓ Surplus ₹${mspDiff.toLocaleString()}/qtl above ${cropLabel} statutory floor protected via Escrow`
+                        : `⚠️ Net realization is ₹${Math.abs(mspDiff).toLocaleString()}/qtl below ${cropLabel} MSP due to freight/market spread. Consider local APMC or MSP procurement.`}
                     </div>
                   </div>
                 </div>
@@ -2687,6 +2983,152 @@ https://agroconnect.gov.in`;
                 <Share2 size={16} />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Multi-Mandi Real-Time Arbitrage Comparison */}
+        <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Compass size={18} color="#059669" />
+                <span>Multi-APMC Real-Time Arbitrage Ranking</span>
+                <span style={{ fontSize: '0.72rem', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                  {calcCommodity} • Origin: {arbitrageOrigin}
+                </span>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: '#64748b', margin: '3px 0 0' }}>
+                Side-by-side comparison of net take-home earnings across major destination APMCs deducting live road freight from {arbitrageOrigin}
+              </p>
+            </div>
+            {isFpoPooling && (
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>
+                ⚡ FPO 45% Pooling Applied to all Mandis
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+            {multiMandiAlternatives.map((alt, index) => {
+              const isBest = index === 0;
+              const isCurrent = alt.isCurrentMandi;
+              return (
+                <div 
+                  key={alt.item.id}
+                  style={{
+                    backgroundColor: isCurrent ? '#f0fdf4' : '#ffffff',
+                    border: isCurrent ? '2px solid #059669' : isBest ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '14px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    position: 'relative',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}
+                >
+                  <div>
+                    {/* Badges */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
+                        Rank #{index + 1}
+                      </span>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        {isBest && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#dbeafe', color: '#1e40af', padding: '2px 7px', borderRadius: '4px' }}>
+                            🏆 Highest Net Payout
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 7px', borderRadius: '4px' }}>
+                            ✓ Active in Calc
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mandi Name & Commodity */}
+                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                      {alt.item.mandi_name}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '1px' }}>
+                      {alt.item.commodity} • {alt.item.variety || 'Standard'} • ~{alt.distanceKm} km from {arbitrageOrigin}
+                    </div>
+
+                    {/* Metrics Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '10px', fontSize: '0.74rem', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '4px' }}>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.68rem' }}>APMC Modal Rate</div>
+                        <div style={{ fontWeight: 800, color: '#0f172a' }}>₹{alt.modalPrice.toLocaleString()}/qtl</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Freight & Handling</div>
+                        <div style={{ fontWeight: 800, color: '#b91c1c' }}>-₹{alt.totalLogistics.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Take-Home & Spread */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '4px' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Net Take-Home</span>
+                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#065f46', fontFamily: 'var(--font-display)' }}>
+                        ₹{alt.netPayout.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Arbitrage Spread Indicator */}
+                    <div style={{ fontSize: '0.7rem', marginTop: '2px', textAlign: 'right' }}>
+                      {isCurrent ? (
+                        <span style={{ color: '#059669', fontWeight: 700 }}>Currently Loaded</span>
+                      ) : alt.diffVsCurrent > 0 ? (
+                        <span style={{ color: '#15803d', fontWeight: 800 }}>
+                          +₹{alt.diffVsCurrent.toLocaleString()} higher profit
+                        </span>
+                      ) : (
+                        <span style={{ color: '#64748b' }}>
+                          ₹{Math.abs(alt.diffVsCurrent).toLocaleString()} lower
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="button"
+                      disabled={isCurrent}
+                      onClick={() => handleSelectMandiForCalc(alt.item)}
+                      style={{
+                        width: '100%',
+                        marginTop: '10px',
+                        padding: '7px 10px',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: isCurrent ? '#f1f5f9' : '#059669',
+                        color: isCurrent ? '#94a3b8' : '#ffffff',
+                        border: 'none',
+                        cursor: isCurrent ? 'default' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '5px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isCurrent ? (
+                        <span>✓ Currently Selected</span>
+                      ) : (
+                        <>
+                          <span>Switch to this APMC</span>
+                          <ArrowRight size={13} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

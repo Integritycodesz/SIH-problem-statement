@@ -78,6 +78,57 @@ function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lo
   return Math.round(distance * 1.28 * 10) / 10;
 }
 
+export const MAHARASHTRA_DISTRICT_COORDS: Record<string, { lat: number; lng: number; label: string }> = {
+  'Nashik': { lat: 19.9975, lng: 73.7898, label: 'Nashik (North Maharashtra Hub)' },
+  'Pune': { lat: 18.5204, lng: 73.8567, label: 'Pune (Western Maharashtra Hub)' },
+  'Chhatrapati Sambhajinagar': { lat: 19.8762, lng: 75.3433, label: 'Chh. Sambhajinagar (Marathwada Hub)' },
+  'Latur': { lat: 18.4088, lng: 76.5604, label: 'Latur (Oilseed & Pulse Capital)' },
+  'Jalna': { lat: 19.8347, lng: 75.8816, label: 'Jalna (Agri Seed & Grain Hub)' },
+  'Amravati': { lat: 20.9374, lng: 77.7796, label: 'Amravati (Vidarbha Cotton Hub)' },
+  'Akola': { lat: 20.7002, lng: 77.0082, label: 'Akola (Oilseed & Cotton Belt)' },
+  'Nagpur': { lat: 21.1458, lng: 79.0882, label: 'Nagpur (Vidarbha Orange/Grain)' },
+  'Jalgaon': { lat: 21.0077, lng: 75.5626, label: 'Jalgaon (Khandesh Banana/Cotton)' },
+  'Solapur': { lat: 17.6599, lng: 75.9064, label: 'Solapur (South Maharashtra Hub)' },
+  'Ahmednagar': { lat: 19.0952, lng: 74.7496, label: 'Ahmednagar (Central Agri Hub)' },
+  'Kolhapur': { lat: 16.7050, lng: 74.2433, label: 'Kolhapur (Sugarcane & Jaggery)' },
+  'Yavatmal': { lat: 20.3888, lng: 78.1204, label: 'Yavatmal (White Gold Belt)' },
+  'Nanded': { lat: 19.1383, lng: 77.3210, label: 'Nanded (Marathwada Border Hub)' },
+  'Dhule': { lat: 20.9042, lng: 74.7749, label: 'Dhule (Khandesh Grain Market)' }
+};
+
+export function calculateMandiDistance(originDistrict: string, destMandiName: string, destDistrict?: string): number {
+  const origin = MAHARASHTRA_DISTRICT_COORDS[originDistrict] || MAHARASHTRA_DISTRICT_COORDS['Nashik'];
+
+  let destCoords = MAHARASHTRA_DISTRICT_COORDS['Nashik'];
+  const mandiLower = destMandiName.toLowerCase();
+  const distLower = (destDistrict || '').toLowerCase();
+
+  for (const [key, coords] of Object.entries(MAHARASHTRA_DISTRICT_COORDS)) {
+    const keyLower = key.toLowerCase();
+    if (mandiLower.includes(keyLower) || distLower.includes(keyLower)) {
+      destCoords = coords;
+      break;
+    }
+  }
+
+  // Handle specific APMC yard locations
+  if (mandiLower.includes('lasalgaon')) destCoords = { lat: 20.1450, lng: 74.2250, label: 'Lasalgaon' };
+  else if (mandiLower.includes('pimpalgaon')) destCoords = { lat: 20.1700, lng: 73.9800, label: 'Pimpalgaon' };
+  else if (mandiLower.includes('yeola')) destCoords = { lat: 20.0400, lng: 74.4800, label: 'Yeola' };
+  else if (mandiLower.includes('sinnar')) destCoords = { lat: 19.8500, lng: 74.0000, label: 'Sinnar' };
+  else if (mandiLower.includes('malegaon')) destCoords = { lat: 20.5500, lng: 74.5300, label: 'Malegaon' };
+  else if (mandiLower.includes('gangapur')) destCoords = { lat: 19.7000, lng: 75.0100, label: 'Gangapur' };
+  else if (mandiLower.includes('vaijapur')) destCoords = { lat: 19.9200, lng: 74.7300, label: 'Vaijapur' };
+  else if (mandiLower.includes('baramati')) destCoords = { lat: 18.1500, lng: 74.5800, label: 'Baramati' };
+  else if (mandiLower.includes('junnar')) destCoords = { lat: 19.2000, lng: 73.8700, label: 'Junnar' };
+  else if (mandiLower.includes('sangamner')) destCoords = { lat: 19.5700, lng: 74.2100, label: 'Sangamner' };
+  else if (mandiLower.includes('washim')) destCoords = { lat: 20.1100, lng: 77.1300, label: 'Washim' };
+  else if (mandiLower.includes('wardha')) destCoords = { lat: 20.7400, lng: 78.6000, label: 'Wardha' };
+
+  const rawDist = calculateHaversineDistance(origin.lat, origin.lng, destCoords.lat, destCoords.lng);
+  return Math.max(15, Math.round(rawDist));
+}
+
 // ============================================================================
 // Government Agmarknet (Data.gov.in) API Types & Cache
 // ============================================================================
@@ -878,6 +929,8 @@ export const api = {
   AGMARKNET_VERIFIED_APMC_BASELINE,
   GOV_STORAGE_KEY,
   CACP_STORAGE_KEY,
+  MAHARASHTRA_DISTRICT_COORDS,
+  calculateMandiDistance,
   getPersistentCache,
   setPersistentCache,
 
