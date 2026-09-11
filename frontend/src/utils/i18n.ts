@@ -33,6 +33,9 @@ export interface TranslationDict {
   apmcParity: string;
   printQrTag: string;
   viewOffers: string;
+  removeLot: string;
+  myBatches: string;
+  allBatches: string;
   viewContract: string;
   directBuyers: string;
   mspFloorTitle: string;
@@ -164,6 +167,9 @@ export const translations: Record<Language, TranslationDict> = {
     apmcParity: 'APMC PARITY',
     printQrTag: 'Print QR Tag',
     viewOffers: 'View Offers',
+    removeLot: 'Remove Batch',
+    myBatches: 'My Batches',
+    allBatches: 'All Batches',
     viewContract: 'View Contract',
     directBuyers: 'Direct Institutional Buyers',
     mspFloorTitle: 'Govt. MSP Floor Guarantee',
@@ -288,6 +294,9 @@ export const translations: Record<Language, TranslationDict> = {
     apmcParity: 'APMC दर फरक',
     printQrTag: 'QR टॅग प्रिंट करा',
     viewOffers: 'मागण्या पहा',
+    removeLot: 'शेतमाल काढा',
+    myBatches: 'माझा शेतमाल',
+    allBatches: 'सर्व शेतमाल',
     viewContract: 'करार पहा',
     directBuyers: 'थेट संस्थात्मक खरेदीदार',
     mspFloorTitle: 'शासकीय किमान हमीभाव (MSP) संरक्षण',

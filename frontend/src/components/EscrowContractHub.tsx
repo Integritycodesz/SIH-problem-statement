@@ -22,7 +22,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   const t = translations[lang] || translations.EN;
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
-  const [aadhaarLastFour, setAadhaarLastFour] = useState<string>('9821');
+  const [aadhaarLastFour, setAadhaarLastFour] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [rolePerspective, setRolePerspective] = useState<'AUTO' | 'FARMER' | 'BUYER' | 'ADMIN'>('AUTO');
 
@@ -241,7 +241,20 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
           </h4>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {contracts.map(c => (
+            {contracts.length === 0 ? (
+              <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <FileText size={32} style={{ margin: '0 auto 10px', color: '#94a3b8' }} />
+                <p style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                  {lang === 'MR' ? 'कोणताही सक्रिय करार नाही' : 'No Active Contracts Found'}
+                </p>
+                <p style={{ fontSize: '0.78rem', marginTop: '4px', lineHeight: 1.4 }}>
+                  {lang === 'MR'
+                    ? 'वाटाघाटी पूर्ण झाल्यावर मान्य झालेली बोली स्वीकारून थेट कायदेशीर करार येथे तयार होतो.'
+                    : 'Legally binding e-contracts are generated automatically once buyer and farmer finalize terms in the RFQ Portal.'}
+                </p>
+              </div>
+            ) : (
+              contracts.map(c => (
               <div 
                 key={c.id} 
                 onClick={() => setSelectedContract(c)}
@@ -277,7 +290,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                   </strong>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
 
@@ -422,6 +435,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                       maxLength={4}
                       value={aadhaarLastFour}
                       onChange={(e) => setAadhaarLastFour(e.target.value)}
+                      placeholder="1234"
                       style={{ width: '70px', padding: '5px 8px', fontSize: '0.78rem' }}
                     />
                   </div>
@@ -522,8 +536,16 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
             </div>
           </div>
         ) : (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            {lang === 'MR' ? 'कृपया डावीकडील कराराची निवड करा.' : 'Select a contract on the left.'}
+          <div className="gov-card" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <Lock size={36} style={{ color: '#94a3b8', marginBottom: '12px' }} />
+            <h4 style={{ fontSize: '1.05rem', color: '#0f172a', marginBottom: '6px' }}>
+              {lang === 'MR' ? 'कोणताही करार निवडलेला नाही' : 'No Contract Selected'}
+            </h4>
+            <p style={{ fontSize: '0.82rem', maxWidth: '380px', margin: '0 auto', lineHeight: 1.5 }}>
+              {lang === 'MR'
+                ? 'तपशील, ५०% आगाऊ एस्क्रो ठेव आणि डिजिटल स्वाक्षरी तपासण्यासाठी डावीकडील कराराची निवड करा.'
+                : 'Select an agreement from the list on the left to review milestone progression, execute digital signatures, or release escrow settlements.'}
+            </p>
           </div>
         )}
       </div>

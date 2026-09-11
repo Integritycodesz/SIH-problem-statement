@@ -29,8 +29,8 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
   const [allLots, setAllLots] = useState<ProduceLot[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
-  const [counterBid, setCounterBid] = useState<number>(2420);
-  const [counterNote, setCounterNote] = useState<string>('Proposing rate with 50% advance locked in escrow today.');
+  const [counterBid, setCounterBid] = useState<number>(propLot?.base_price_per_quintal || 2400);
+  const [counterNote, setCounterNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
   const [showAssayModal, setShowAssayModal] = useState<boolean>(false);
@@ -66,8 +66,19 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
       setAllLots(fetchedLots);
       setRfqs(fetchedRfqs);
 
+      // If no lots in DB, clear any stale prop lot
+      if (fetchedLots.length === 0) {
+        setCurrentLot(null);
+        setActiveRfq(null);
+        return;
+      }
+
       // Determine target lot
       let targetLot = propLot;
+      // Validate propLot still exists in DB
+      if (targetLot && !fetchedLots.find(l => l.id === targetLot!.id)) {
+        targetLot = null;
+      }
       if (!targetLot && initialRfqId) {
         const matchingRfq = fetchedRfqs.find(r => r.id === initialRfqId);
         if (matchingRfq) {
@@ -81,6 +92,9 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
       if (targetLot) {
         setCurrentLot(targetLot);
         bindRfqSession(targetLot, fetchedRfqs);
+      } else {
+        setCurrentLot(null);
+        setActiveRfq(null);
       }
     } catch (err) {
       console.error('Error loading RFQ portal data:', err);
@@ -91,60 +105,10 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
     const existing = currentRfqs.find(r => r.lot_id === lot.id);
     if (existing) {
       setActiveRfq(existing);
-      setCounterBid(existing.current_offered_price || lot.base_price_per_quintal - 30);
+      setCounterBid(existing.current_offered_price || lot.base_price_per_quintal);
     } else {
-      // Create reactive in-memory session
-      const tempRfq: RFQ = {
-        id: Date.now(),
-        lot_id: lot.id,
-        buyer_id: currentUser?.id || 8,
-        buyer_name: currentUser?.name || 'Sahyadri Agro Processing Ltd (Pravin Joshi)',
-        farmer_id: lot.farmer_id,
-        farmer_name: lot.farmer_name,
-        commodity: lot.commodity,
-        quantity_quintals: lot.quantity_quintals,
-        initial_offer_price: lot.base_price_per_quintal - 50,
-        current_offered_price: lot.base_price_per_quintal - 30,
-        status: 'COUNTERED',
-        delivery_timeline_days: lot.expected_delivery_days || 3,
-        delivery_address: 'APMC Central Logistics Processing Terminal, Sector 19, Vashi',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        messages: [
-          {
-            id: 1,
-            rfq_id: Date.now(),
-            sender_id: 8,
-            sender_name: 'Sahyadri Agro Processing Ltd (BUYER)',
-            sender_role: 'BUYER',
-            offered_price: lot.base_price_per_quintal - 70,
-            message_text: `Seeking ${lot.quantity_quintals} qtl export batch. Offering ₹${lot.base_price_per_quintal - 70}/qtl for immediate gate arrival.`,
-            created_at: new Date(Date.now() - 3600 * 1000 * 4).toISOString()
-          },
-          {
-            id: 2,
-            rfq_id: Date.now(),
-            sender_id: lot.farmer_id,
-            sender_name: `${lot.farmer_name} (FARMER)`,
-            sender_role: 'FARMER',
-            offered_price: lot.base_price_per_quintal,
-            message_text: `Moisture is strictly ≤ ${lot.moisture_percent}% NABL certified. Can settle at ₹${lot.base_price_per_quintal}/qtl.`,
-            created_at: new Date(Date.now() - 3600 * 1000 * 2).toISOString()
-          },
-          {
-            id: 3,
-            rfq_id: Date.now(),
-            sender_id: 8,
-            sender_name: 'Sahyadri Agro Processing Ltd (BUYER)',
-            sender_role: 'BUYER',
-            offered_price: lot.base_price_per_quintal - 30,
-            message_text: `Counter-offer: ₹${lot.base_price_per_quintal - 30}/qtl with 50% escrow advance deposit locked today.`,
-            created_at: new Date(Date.now() - 3600 * 1000).toISOString()
-          }
-        ]
-      };
-      setActiveRfq(tempRfq);
-      setCounterBid(lot.base_price_per_quintal - 30);
+      setActiveRfq(null);
+      setCounterBid(lot.base_price_per_quintal);
     }
   };
 
@@ -155,50 +119,52 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
   };
 
   const handleCounterSubmit = async () => {
-    if (!currentLot || !activeRfq) return;
+    if (!currentLot) return;
     setIsSubmitting(true);
     try {
-      let rfqId = activeRfq.id;
-      const exists = rfqs.some(r => r.id === rfqId);
-
-      if (!exists) {
+      if (!activeRfq) {
+        // Create live RFQ directly in Supabase
         const created = await api.createRFQ({
           lot_id: currentLot.id,
           buyer_id: currentUser?.id || 8,
-          buyer_name: currentUser?.name || 'Sahyadri Agro Processing Ltd (Pravin Joshi)',
+          buyer_name: currentUser?.name || 'Institutional Buyer',
           farmer_id: currentLot.farmer_id,
           farmer_name: currentLot.farmer_name,
           commodity: currentLot.commodity,
           quantity_quintals: currentLot.quantity_quintals,
           initial_offer_price: counterBid,
           delivery_timeline_days: currentLot.expected_delivery_days || 3,
-          delivery_address: 'APMC Central Logistics Terminal, Vashi Navi Mumbai',
-          first_message: counterNote || `Counter-offer submitted: ₹${counterBid}/qtl.`
+          delivery_address: currentUser?.district ? `${currentUser.district} Logistics Hub` : `${currentLot.mandi_name || 'APMC Central Logistics Yard'}`,
+          first_message: counterNote || `Initial procurement offer placed at ₹${counterBid}/qtl.`
         });
-        rfqId = created.id;
+        setActiveRfq(created);
+        setRfqs(prev => [created, ...prev]);
+        setFeedbackBanner(`✓ Initial procurement bid of ₹${counterBid.toLocaleString()}/qtl submitted to Supabase!`);
       } else {
-        await api.counterOffer(rfqId, {
-          sender_id: currentUser?.id || 8,
-          sender_name: currentUser?.name || 'Sahyadri Agro Processing Ltd (Pravin Joshi)',
-          sender_role: currentUser?.role || 'BUYER',
+        const effectiveRole = currentUser?.role || 'BUYER';
+        const senderName = currentUser?.name || (effectiveRole === 'BUYER' ? 'Institutional Buyer' : 'Farmer FPO');
+        const updated = await api.counterOffer(activeRfq.id, {
+          sender_id: currentUser?.id || (effectiveRole === 'BUYER' ? 8 : (currentLot?.farmer_id || 1)),
+          sender_name: senderName,
+          sender_role: effectiveRole,
           offered_price: counterBid,
-          message_text: counterNote || `Updated counter-bid to ₹${counterBid}/qtl.`
+          message_text: counterNote || `Counter-offer: ₹${counterBid}/qtl.`
         });
+        setActiveRfq(updated);
+        setRfqs(prev => prev.map(r => r.id === updated.id ? updated : r));
+        setFeedbackBanner(`✓ Counter-offer of ₹${counterBid.toLocaleString()}/qtl transmitted to Supabase!`);
       }
 
-      const allRfqs = await api.getRFQs();
-      setRfqs(allRfqs);
-      const updated = allRfqs.find(r => r.id === rfqId);
-      if (updated) setActiveRfq(updated);
       setCounterNote('');
-      setFeedbackBanner(`Counter-offer of ₹${counterBid.toLocaleString()}/qtl transmitted to FPO successfully!`);
       setTimeout(() => setFeedbackBanner(null), 5000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting counter offer:', err);
+      setFeedbackBanner(`Error submitting offer: ${err?.message || 'Please check connection'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   const handleAcceptTermsAndSign = async () => {
     if (!activeRfq) return;
@@ -214,12 +180,44 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
   };
 
   // Calculations
-  const lotWeightQuintals = currentLot?.quantity_quintals || 400;
+  const lotWeightQuintals = currentLot?.quantity_quintals || 0;
   const lotWeightMT = (lotWeightQuintals / 10).toFixed(1);
-  const askingRate = currentLot?.base_price_per_quintal || 2450;
+  const askingRate = currentLot?.base_price_per_quintal || 0;
   const savingPerQtl = askingRate - counterBid;
   const totalDealValue = counterBid * lotWeightQuintals;
   const escrowAdvance = Math.round(totalDealValue * 0.5);
+
+  // Empty state: no lots in database
+  if (!currentLot) {
+    return (
+      <div style={{ padding: '24px 0 48px', minHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button 
+            onClick={onBackToMarketplace}
+            className="btn-gov-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
+          >
+            <ArrowLeft size={15} />
+            {t.backToMarketplace}
+          </button>
+        </div>
+        <div className="gov-card" style={{ padding: '60px 30px', textAlign: 'center' }}>
+          <ShieldCheck size={48} style={{ margin: '0 auto 16px', color: '#94a3b8' }} />
+          <h3 style={{ fontSize: '1.3rem', color: '#0f172a', marginBottom: '8px' }}>
+            {lang === 'MR' ? 'कोणताही शेतमाल उपलब्ध नाही' : 'No Harvest Lots Available for Negotiation'}
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+            {lang === 'MR'
+              ? 'सध्या कोणत्याही शेतकऱ्याने शेतमाल सूचीबद्ध केलेला नाही. कृपया शेतकरी पोर्टलवरून शेतमाल नोंदणी करा किंवा नंतर पुन्हा तपासा.'
+              : 'No farmer produce lots are currently listed in the marketplace. Farmers can list their harvest from the Farmer Portal, or check back after new mandi arrivals.'}
+          </p>
+          <button className="btn-gov-primary" onClick={onBackToMarketplace} style={{ margin: '0 auto' }}>
+            {lang === 'MR' ? 'बाजारपेठेवर परत जा' : 'Back to Marketplace'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '24px 0 48px', minHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -264,7 +262,7 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
             gap: '6px'
           }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981' }} />
-            Active Lot #{currentLot?.id || 819} • Bilateral Channel
+            Active Lot #{currentLot?.id} • Bilateral Channel
           </span>
 
           <span style={{
@@ -575,10 +573,10 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
                 Match Asking (₹{askingRate})
               </button>
               <button 
-                onClick={() => setCounterBid(2380)} 
+                onClick={() => setCounterBid(askingRate > 70 ? askingRate - 70 : askingRate)} 
                 style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '4px', padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
               >
-                APMC Prevailing (₹2,380)
+                APMC Floor (₹{askingRate > 70 ? askingRate - 70 : askingRate})
               </button>
             </div>
 
@@ -760,11 +758,11 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Foreign Matter:</span>
-                  <div><strong>0.4% (Permissible &lt;1.0%)</strong></div>
+                  <div><strong>{currentLot.quality_grade?.includes('A+') ? '0.3' : currentLot.quality_grade?.includes('A') ? '0.5' : '0.7'}% (Permissible &lt;1.0%)</strong></div>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Damaged / Discolored:</span>
-                  <div><strong>0.8% (Permissible &lt;2.0%)</strong></div>
+                  <div><strong>{currentLot.quality_grade?.includes('A+') ? '0.5' : currentLot.quality_grade?.includes('A') ? '0.8' : '1.2'}% (Permissible &lt;2.0%)</strong></div>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Harvest Hub:</span>

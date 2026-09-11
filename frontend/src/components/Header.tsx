@@ -4,8 +4,9 @@ import {
   User as UserIcon, Zap, CheckCheck, Lock, LogOut
 } from 'lucide-react';
 import { api, type User, type AgriNotification } from '../services/api';
-import { isSupabaseConfigured } from '../services/supabase';
+import { isSupabaseConfigured, subscribeToCommodityPrices } from '../services/supabase';
 import { translations, type Language } from '../utils/i18n';
+import { getRolePermissions } from '../utils/rbac';
 
 interface LiveTickerItem {
   id: string;
@@ -19,23 +20,6 @@ interface LiveTickerItem {
   arrivals?: string;
 }
 
-const APMC_LIVE_TICKER_FEED: LiveTickerItem[] = [
-  { id: '1', mandi: 'Lasalgaon', mandiMr: 'लासलगाव', commodity: 'Onion (कांदा)', commodityMr: 'कांदा गरवा', price: 2450, change: '+3.2%', changeType: 'up', arrivals: '28.4K qtl' },
-  { id: '2', mandi: 'Pune Gultekdi', mandiMr: 'पुणे गुलटेकडी', commodity: 'Soybean (सोयाबीन)', commodityMr: 'सोयाबीन', price: 4820, change: '+1.5%', changeType: 'up', arrivals: '14.2K qtl' },
-  { id: '3', mandi: 'Pimpalgaon Baswant', mandiMr: 'पिंपळगाव बसवंत', commodity: 'Tomato (टोमॅटो)', commodityMr: 'टोमॅटो', price: 1850, change: '+4.5%', changeType: 'up', arrivals: '19.8K qtl' },
-  { id: '4', mandi: 'Nagpur Central', mandiMr: 'नागपूर सेंट्रल', commodity: 'Cotton Bt (कापूस)', commodityMr: 'कापूस लांब स्टेपल', price: 7120, change: '+2.3%', changeType: 'up', arrivals: '11.5K qtl' },
-  { id: '5', mandi: 'Vashi APMC', mandiMr: 'वाशी मुंबई', commodity: 'Export Onion (कांदा)', commodityMr: 'कांदा निर्यात प्रत', price: 2700, change: '+2.8%', changeType: 'up', arrivals: '34.0K qtl' },
-  { id: '6', mandi: 'Latur APMC', mandiMr: 'लातूर बाजार', commodity: 'Tur / Arhar (तूर)', commodityMr: 'तूर / अरहर', price: 10450, change: '+3.8%', changeType: 'up', arrivals: '8.6K qtl' },
-  { id: '7', mandi: 'Sangli Market Yard', mandiMr: 'सांगली मार्केट', commodity: 'Turmeric (हळद)', commodityMr: 'हळद राजापुरी', price: 14250, change: '+5.1%', changeType: 'up', arrivals: '6.2K qtl' },
-  { id: '8', mandi: 'Solapur APMC', mandiMr: 'सोलापूर', commodity: 'Gram / Chana (चना)', commodityMr: 'हरभरा / चना', price: 5980, change: '+0.8%', changeType: 'up', arrivals: '12.1K qtl' },
-  { id: '9', mandi: 'Kolhapur Shahupuri', mandiMr: 'कोल्हापूर शाहूपुरी', commodity: 'Jaggery (गूळ)', commodityMr: 'कोल्हापुरी गूळ', price: 4150, change: '+1.2%', changeType: 'up', arrivals: '9.4K qtl' },
-  { id: '10', mandi: 'Jalgaon Mandi', mandiMr: 'जळगाव', commodity: 'Banana (केळी)', commodityMr: 'केळी ग्रँड नैन', price: 1650, change: '-0.5%', changeType: 'down', arrivals: '22.0K qtl' },
-  { id: '11', mandi: 'Ahmednagar APMC', mandiMr: 'अहमदनगर', commodity: 'Pomegranate (डाळिंब)', commodityMr: 'डाळिंब भगवा', price: 8400, change: '+2.6%', changeType: 'up', arrivals: '7.8K qtl' },
-  { id: '12', mandi: 'Chh. Sambhajinagar', mandiMr: 'छ. संभाजीनगर', commodity: 'Wheat Lokwan (गहू)', commodityMr: 'गहू लोकवान', price: 2680, change: '+0.5%', changeType: 'up', arrivals: '16.5K qtl' },
-  { id: '13', mandi: 'Nashik Dindori', mandiMr: 'नाशिक दिंडोरी', commodity: 'Table Grapes (द्राक्षे)', commodityMr: 'द्राक्षे थॉमसन', price: 6800, change: '+4.0%', changeType: 'up', arrivals: '15.3K qtl' },
-  { id: '14', mandi: 'Akola Cotton Hub', mandiMr: 'अकोला हब', commodity: 'Soybean Seed (सोयाबीन)', commodityMr: 'सोयाबीन JS-335', price: 4890, change: '+1.8%', changeType: 'up', arrivals: '10.9K qtl' },
-  { id: '15', mandi: 'Baramati APMC', mandiMr: 'बारामती', commodity: 'Sugarcane (ऊस)', commodityMr: 'ऊस CO-86032', price: 3150, change: '0.0%', changeType: 'neutral', arrivals: '45.0K MT' }
-];
 
 interface HeaderProps {
   currentUser: User | null;
@@ -63,14 +47,53 @@ export const Header: React.FC<HeaderProps> = ({
   const [showRoleDropdown, setShowRoleDropdown] = useState<boolean>(false);
   const [showNotifDrawer, setShowNotifDrawer] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<AgriNotification[]>([]);
+  const [tickerFeed, setTickerFeed] = useState<LiveTickerItem[]>([]);
   const supabaseActive = isSupabaseConfigured();
   const t = translations[lang];
 
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 8000);
-    return () => clearInterval(interval);
+    loadLiveTicker();
+    const interval = setInterval(() => {
+      loadNotifications();
+      loadLiveTicker();
+    }, 15000);
+    const sub = subscribeToCommodityPrices(() => {
+      loadLiveTicker();
+    });
+    return () => {
+      clearInterval(interval);
+      if (sub && typeof sub.unsubscribe === 'function') {
+        sub.unsubscribe();
+      }
+    };
   }, []);
+
+  const loadLiveTicker = async () => {
+    try {
+      const prices = await api.getPrices(undefined, 25);
+      if (prices && prices.length > 0) {
+        const items: LiveTickerItem[] = prices.map((p) => {
+          const changeVal = Number(p.change_24h) || 0;
+          return {
+            id: String(p.id),
+            mandi: p.mandi_name.replace(' APMC', '').replace(' Market', ''),
+            mandiMr: p.mandi_name,
+            commodity: p.commodity + (p.variety ? ` (${p.variety})` : ''),
+            commodityMr: p.commodity,
+            price: Number(p.modal_price) || 0,
+            change: `${changeVal >= 0 ? '+' : ''}${changeVal}%`,
+            changeType: changeVal > 0 ? 'up' : changeVal < 0 ? 'down' : 'neutral',
+            arrivals: p.arrivals_tonnes ? `${p.arrivals_tonnes} tonnes` : undefined
+          };
+        });
+        setTickerFeed(items);
+      }
+    } catch (err) {
+      console.warn('Error loading dynamic live ticker:', err);
+    }
+  };
+
 
   const loadNotifications = async () => {
     try {
@@ -102,6 +125,8 @@ export const Header: React.FC<HeaderProps> = ({
     }
     loadNotifications();
   };
+
+  const rolePerms = getRolePermissions(currentUser);
 
   return (
     <div style={{ backgroundColor: '#ffffff', borderBottom: '1px solid var(--border-card)' }}>
@@ -148,49 +173,55 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Center: Infinite Marquee Scrolling Viewport with gradient mask */}
         <div className="apmc-ticker-viewport" title="Hover to pause scroll">
           <div className="apmc-ticker-track">
-            {/* Duplicated list to create infinite seamless loop */}
-            {[...APMC_LIVE_TICKER_FEED, ...APMC_LIVE_TICKER_FEED].map((item, idx) => (
-              <div
-                key={`${item.id}-${idx}`}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '0.82rem',
-                  whiteSpace: 'nowrap',
-                  padding: '3px 10px',
-                  borderRadius: '6px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.09)'
-                }}
-              >
-                <span style={{ fontWeight: 700, color: '#f8fafc' }}>
-                  {lang === 'MR' ? item.mandiMr : item.mandi}
-                </span>
-                <span style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
-                  {lang === 'MR' ? item.commodityMr : item.commodity}:
-                </span>
-                <strong style={{ color: '#ffffff', fontFamily: 'var(--font-display)', fontSize: '0.86rem', fontWeight: 800 }}>
-                  ₹{item.price.toLocaleString()}/qtl
-                </strong>
-                <span style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  padding: '1px 6px',
-                  borderRadius: '4px',
-                  backgroundColor: item.changeType === 'down' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.28)',
-                  color: item.changeType === 'down' ? '#fca5a5' : '#6ee7b7'
-                }}>
-                  {item.changeType === 'up' ? '▲ ' : item.changeType === 'down' ? '▼ ' : ''}{item.change}
-                </span>
-                {item.arrivals && (
-                  <span style={{ fontSize: '0.7rem', color: '#a7f3d0', opacity: 0.85 }}>
-                    ({item.arrivals})
-                  </span>
-                )}
-                <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '4px' }}>•</span>
+            {tickerFeed.length === 0 ? (
+              <div style={{ color: '#a7f3d0', fontSize: '0.8rem', padding: '4px 14px' }}>
+                Connecting to live Maharashtra APMC Mandi feeds...
               </div>
-            ))}
+            ) : (
+              [...tickerFeed, ...tickerFeed].map((item, idx) => (
+                <div
+                  key={`${item.id}-${idx}`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.82rem',
+                    whiteSpace: 'nowrap',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.09)'
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: '#f8fafc' }}>
+                    {lang === 'MR' ? item.mandiMr : item.mandi}
+                  </span>
+                  <span style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+                    {lang === 'MR' ? item.commodityMr : item.commodity}:
+                  </span>
+                  <strong style={{ color: '#ffffff', fontFamily: 'var(--font-display)', fontSize: '0.86rem', fontWeight: 800 }}>
+                    ₹{item.price.toLocaleString()}/qtl
+                  </strong>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    backgroundColor: item.changeType === 'down' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.28)',
+                    color: item.changeType === 'down' ? '#fca5a5' : '#6ee7b7'
+                  }}>
+                    {item.changeType === 'up' ? '▲ ' : item.changeType === 'down' ? '▼ ' : ''}{item.change}
+                  </span>
+                  {item.arrivals && (
+                    <span style={{ fontSize: '0.7rem', color: '#a7f3d0', opacity: 0.85 }}>
+                      ({item.arrivals})
+                    </span>
+                  )}
+                  <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '4px' }}>•</span>
+                </div>
+              ))
+            )}
+
           </div>
         </div>
 
@@ -274,8 +305,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center Tabs */}
+        {/* Center Tabs — Role-filtered using RBAC primaryTabs */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
+          {/* Mandi Prices — always visible to everyone */}
           <button
             onClick={() => onSelectTab('intelligence')}
             style={{
@@ -290,95 +322,123 @@ export const Header: React.FC<HeaderProps> = ({
             {t.mandiPricesTab}
           </button>
 
-          <button
-            onClick={() => onSelectTab('farmer')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              backgroundColor: activeTab === 'farmer' ? '#dcfce7' : 'transparent',
-              color: activeTab === 'farmer' ? '#166534' : '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            {activeTab === 'farmer' && <Check size={14} />}
-            {t.farmerProduceTab}
-          </button>
+          {/* Farmer Produce — only FARMER, FPO, ADMIN, OFFICIAL */}
+          {rolePerms.primaryTabs.includes('farmer') && (
+            <button
+              onClick={() => onSelectTab('farmer')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'farmer' ? '#dcfce7' : 'transparent',
+                color: activeTab === 'farmer' ? '#166534' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {activeTab === 'farmer' && <Check size={14} />}
+              <span>{t.farmerProduceTab}</span>
+              {(currentUser?.role === 'FARMER' || currentUser?.role === 'FPO') && (
+                <span style={{ fontSize: '0.62rem', backgroundColor: '#059669', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  {lang === 'MR' ? 'माझे' : 'My'}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            onClick={() => onSelectTab('buyer')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              backgroundColor: activeTab === 'buyer' ? '#065f46' : 'transparent',
-              color: activeTab === 'buyer' ? '#ffffff' : '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            {!currentUser && <Lock size={12} style={{ opacity: 0.6 }} />}
-            {t.marketplaceTab}
-          </button>
+          {/* Marketplace — BUYER, ADMIN, OFFICIAL + Guests with lock */}
+          {(rolePerms.primaryTabs.includes('buyer') || !currentUser) && (
+            <button
+              onClick={() => onSelectTab('buyer')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'buyer' ? '#065f46' : 'transparent',
+                color: activeTab === 'buyer' ? '#ffffff' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {!currentUser && <Lock size={12} style={{ opacity: 0.6 }} />}
+              <span>{t.marketplaceTab}</span>
+              {currentUser?.role === 'BUYER' && (
+                <span style={{ fontSize: '0.62rem', backgroundColor: '#2563eb', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  {lang === 'MR' ? 'खरेदी' : 'Buyer'}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            onClick={() => onSelectTab('rfq')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              backgroundColor: activeTab === 'rfq' ? '#065f46' : 'transparent',
-              color: activeTab === 'rfq' ? '#ffffff' : '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}
-          >
-            {!currentUser ? <Lock size={12} style={{ opacity: 0.6 }} /> : <Zap size={13} color={activeTab === 'rfq' ? '#34d399' : '#059669'} />}
-            {t.rfqTab}
-          </button>
+          {/* Bilateral RFQ — FARMER, BUYER, ADMIN */}
+          {rolePerms.primaryTabs.includes('rfq') && (
+            <button
+              onClick={() => onSelectTab('rfq')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'rfq' ? '#065f46' : 'transparent',
+                color: activeTab === 'rfq' ? '#ffffff' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Zap size={13} color={activeTab === 'rfq' ? '#34d399' : '#059669'} />
+              {t.rfqTab}
+            </button>
+          )}
 
-          <button
-            onClick={() => onSelectTab('contracts')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              backgroundColor: activeTab === 'contracts' ? '#065f46' : 'transparent',
-              color: activeTab === 'contracts' ? '#ffffff' : '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            {!currentUser && <Lock size={12} style={{ opacity: 0.6 }} />}
-            {t.escrowContractsTab}
-          </button>
+          {/* Escrow & Contracts — all authenticated roles */}
+          {rolePerms.primaryTabs.includes('contracts') && (
+            <button
+              onClick={() => onSelectTab('contracts')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'contracts' ? '#065f46' : 'transparent',
+                color: activeTab === 'contracts' ? '#ffffff' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              {t.escrowContractsTab}
+            </button>
+          )}
 
-          <button
-            onClick={() => onSelectTab('disputes')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              backgroundColor: activeTab === 'disputes' ? '#065f46' : 'transparent',
-              color: activeTab === 'disputes' ? '#ffffff' : '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            {!currentUser && <Lock size={12} style={{ opacity: 0.6 }} />}
-            {t.disputesTab}
-          </button>
+          {/* Help & Disputes — all authenticated roles */}
+          {rolePerms.primaryTabs.includes('disputes') && (
+            <button
+              onClick={() => onSelectTab('disputes')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'disputes' ? '#065f46' : 'transparent',
+                color: activeTab === 'disputes' ? '#ffffff' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>{t.disputesTab}</span>
+              {currentUser?.role === 'OFFICIAL' && (
+                <span style={{ fontSize: '0.62rem', backgroundColor: '#d97706', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  {lang === 'MR' ? 'लवाद' : 'Arbiter'}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Right Controls: Language, Interactive Notification Bell & User Profile Switcher */}
@@ -568,10 +628,10 @@ export const Header: React.FC<HeaderProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '4px 8px 4px 4px',
+                  padding: '4px 10px 4px 4px',
                   borderRadius: 'var(--radius-full)',
                   backgroundColor: '#f8fafc',
-                  border: '1px solid var(--border-card)',
+                  border: `1px solid ${rolePerms.badgeBorder}`,
                   cursor: 'pointer'
                 }}
               >
@@ -580,17 +640,26 @@ export const Header: React.FC<HeaderProps> = ({
                   alt="User Avatar"
                   style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
                 />
-                <div style={{ textAlign: 'left', lineHeight: 1.1 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
-                    {currentUser.name}
+                <div style={{ textAlign: 'left', lineHeight: 1.15 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                      {currentUser.name}
+                    </span>
+                    <span style={{
+                      fontSize: '0.58rem',
+                      fontWeight: 800,
+                      backgroundColor: rolePerms.badgeBg,
+                      color: rolePerms.badgeColor,
+                      border: `1px solid ${rolePerms.badgeBorder}`,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {currentUser.role}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: '#059669', fontWeight: 600 }}>
-                    {currentUser.role === 'BUYER' 
-                      ? (lang === 'MR' ? 'संस्थात्मक खरेदीदार' : 'Corporate Buyer')
-                      : currentUser.role === 'OFFICIAL' 
-                      ? (lang === 'MR' ? 'बाजार समिती लवाद अधिकारी' : 'APMC Official Arbiter')
-                      : (lang === 'MR' ? 'शेतकरी प्रतिनिधी • नाशिक' : 'FPO Delegate • Nashik')
-                    }
+                  <div style={{ fontSize: '0.64rem', color: rolePerms.badgeColor, fontWeight: 600 }}>
+                    {lang === 'MR' ? rolePerms.titleMr : rolePerms.titleEn}
                   </div>
                 </div>
                 <ChevronDown size={14} color="#64748b" />
@@ -603,18 +672,23 @@ export const Header: React.FC<HeaderProps> = ({
                   top: '100%',
                   right: 0,
                   marginTop: '6px',
-                  width: '260px',
+                  width: '280px',
                   backgroundColor: '#ffffff',
                   border: '1px solid var(--border-card)',
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-lg)',
-                  padding: '6px',
+                  padding: '8px',
                   zIndex: 50
                 }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', padding: '6px 8px', textTransform: 'uppercase' }}>
-                    {t.switchPersona}
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', padding: '4px 8px 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {lang === 'MR' ? 'भूमिका बदला (RBAC चाचणी):' : 'Switch Persona (RBAC Testing):'}
                   </div>
-                  {allUsers.map((u) => (
+
+                  {/* Section: Farmers */}
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', padding: '4px 8px', textTransform: 'uppercase' }}>
+                    👨‍🌾 {lang === 'MR' ? 'शेतकरी / FPO गट' : 'Farmers & FPOs'}
+                  </div>
+                  {allUsers.filter(u => u.role === 'FARMER' || u.role === 'FPO').slice(0, 3).map((u) => (
                     <div
                       key={u.id}
                       onClick={() => {
@@ -622,31 +696,92 @@ export const Header: React.FC<HeaderProps> = ({
                         setShowRoleDropdown(false);
                       }}
                       style={{
-                        padding: '8px',
+                        padding: '6px 8px',
                         borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px',
-                        backgroundColor: currentUser.id === u.id ? 'var(--primary-surface)' : 'transparent'
+                        backgroundColor: currentUser.id === u.id ? '#ecfdf5' : 'transparent',
+                        marginBottom: '2px'
                       }}
                     >
-                      <UserIcon size={14} color={currentUser.id === u.id ? '#059669' : '#64748b'} />
-                      <div style={{ fontSize: '0.78rem' }}>
+                      <UserIcon size={13} color={currentUser.id === u.id ? '#059669' : '#64748b'} />
+                      <div style={{ fontSize: '0.76rem' }}>
                         <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{u.role} • {u.district}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.district}</div>
                       </div>
                     </div>
                   ))}
 
-                  <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '4px', paddingTop: '4px' }}>
+                  {/* Section: Corporate Buyers */}
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#2563eb', padding: '6px 8px 4px', textTransform: 'uppercase', borderTop: '1px solid #f1f5f9', marginTop: '4px' }}>
+                    🏢 {lang === 'MR' ? 'संस्थात्मक खरेदीदार' : 'Corporate Buyers'}
+                  </div>
+                  {allUsers.filter(u => u.role === 'BUYER').slice(0, 2).map((u) => (
+                    <div
+                      key={u.id}
+                      onClick={() => {
+                        onSelectUser(u);
+                        setShowRoleDropdown(false);
+                      }}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        backgroundColor: currentUser.id === u.id ? '#eff6ff' : 'transparent',
+                        marginBottom: '2px'
+                      }}
+                    >
+                      <UserIcon size={13} color={currentUser.id === u.id ? '#2563eb' : '#64748b'} />
+                      <div style={{ fontSize: '0.76rem' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.district}</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Section: Official Arbiters */}
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#d97706', padding: '6px 8px 4px', textTransform: 'uppercase', borderTop: '1px solid #f1f5f9', marginTop: '4px' }}>
+                    ⚖️ {lang === 'MR' ? 'बाजार समिती लवाद अधिकारी' : 'APMC Mandi Arbiter'}
+                  </div>
+                  {allUsers.filter(u => u.role === 'OFFICIAL').map((u) => (
+                    <div
+                      key={u.id}
+                      onClick={() => {
+                        onSelectUser(u);
+                        setShowRoleDropdown(false);
+                      }}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        backgroundColor: currentUser.id === u.id ? '#fef3c7' : 'transparent',
+                        marginBottom: '2px'
+                      }}
+                    >
+                      <UserIcon size={13} color={currentUser.id === u.id ? '#d97706' : '#64748b'} />
+                      <div style={{ fontSize: '0.76rem' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>APMC State Arbiter</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '6px', paddingTop: '6px' }}>
                     <div
                       onClick={() => {
                         setShowRoleDropdown(false);
                         onLogout();
                       }}
                       style={{
-                        padding: '8px',
+                        padding: '6px 8px',
                         borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         display: 'flex',
@@ -655,8 +790,8 @@ export const Header: React.FC<HeaderProps> = ({
                         color: '#dc2626'
                       }}
                     >
-                      <LogOut size={14} />
-                      <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                      <LogOut size={13} />
+                      <span style={{ fontSize: '0.76rem', fontWeight: 600 }}>
                         {lang === 'MR' ? 'लॉग आऊट' : 'Sign Out'}
                       </span>
                     </div>

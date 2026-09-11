@@ -9,6 +9,7 @@ import { DisputePortal } from './components/DisputePortal';
 import { AuthModal } from './components/AuthModal';
 import { api, type User, type ProduceLot } from './services/api';
 import { type Language } from './utils/i18n';
+import { getRolePermissions } from './utils/rbac';
 import { Lock, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -28,6 +29,12 @@ export const App: React.FC = () => {
   const [disputeTargetContractId, setDisputeTargetContractId] = useState<number | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
   const [negotiationLot, setNegotiationLot] = useState<ProduceLot | null>(null);
+  const [prefillLotData, setPrefillLotData] = useState<{ commodity: string; variety?: string; price: number; mandi?: string } | null>(null);
+
+  const handleListLotFromMandi = (data: { commodity: string; variety?: string; price: number; mandi?: string }) => {
+    setPrefillLotData(data);
+    setActiveTab('farmer');
+  };
 
   // Authentication State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -39,7 +46,31 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+    initAuth();
   }, []);
+
+  const initAuth = async () => {
+    try {
+      const sessionUser = await api.getActiveSessionUser();
+      if (sessionUser) {
+        setCurrentUser(sessionUser);
+      }
+    } catch (err) {
+      console.warn('[App Auth] Session restoration notice:', err);
+    }
+
+    const sub = api.onAuthStateChange((user) => {
+      if (user) {
+        setCurrentUser(user);
+      }
+    });
+
+    return () => {
+      if (sub && typeof (sub as any).unsubscribe === 'function') {
+        (sub as any).unsubscribe();
+      }
+    };
+  };
 
   const loadUsers = async () => {
     try {
@@ -49,6 +80,7 @@ export const App: React.FC = () => {
       console.error('Error fetching users:', e);
     }
   };
+
 
   const getTabLabel = (tab: string): string => {
     switch (tab) {
@@ -107,10 +139,19 @@ export const App: React.FC = () => {
     } else if (pendingTabAfterAuth) {
       setActiveTab(pendingTabAfterAuth);
       setPendingTabAfterAuth(null);
+    } else {
+      // No pending redirect — navigate to user's role-appropriate default tab
+      const perms = getRolePermissions(user);
+      setActiveTab(perms.defaultTab);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.signOut();
+    } catch (err) {
+      console.warn('[App Auth] Sign out notice:', err);
+    }
     setCurrentUser(null);
     try {
       localStorage.removeItem('agroconnect_user');
@@ -123,15 +164,13 @@ export const App: React.FC = () => {
     }
   };
 
+
+  const rolePerms = getRolePermissions(currentUser);
+
   const handleUserSelect = (user: User) => {
     handleLoginSuccess(user);
-    if (user.role === 'FARMER') {
-      setActiveTab('farmer');
-    } else if (user.role === 'BUYER') {
-      setActiveTab('buyer');
-    } else if (user.role === 'OFFICIAL') {
-      setActiveTab('disputes');
-    }
+    const perms = getRolePermissions(user);
+    setActiveTab(perms.defaultTab);
   };
 
   const handleNavigateToDisputes = (contractId: number) => {
@@ -175,6 +214,44 @@ export const App: React.FC = () => {
         }}
         onLogout={handleLogout}
       />
+
+      {/* RBAC Active Role Banner Strip */}
+      {currentUser && (
+        <div style={{
+          backgroundColor: rolePerms.badgeBg,
+          borderBottom: `1px solid ${rolePerms.badgeBorder}`,
+          padding: '6px 20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px',
+          boxShadow: 'inset 0 -1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{
+              backgroundColor: '#ffffff',
+              border: `1px solid ${rolePerms.badgeBorder}`,
+              color: rolePerms.badgeColor,
+              fontWeight: 800,
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontSize: '0.66rem',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: rolePerms.badgeColor }} />
+              {rolePerms.role} RBAC ACCESS
+            </span>
+            <span style={{ color: '#1e293b', fontSize: '0.78rem', fontWeight: 600 }}>
+              {lang === 'MR' ? 'अधिकृत वापरकर्ता:' : 'Signed in as:'} <strong>{currentUser.name}</strong> ({lang === 'MR' ? rolePerms.titleMr : rolePerms.titleEn})
+            </span>
+          </div>
+        </div>
+      )}
 
       <main className="app-container" style={{ flex: 1 }}>
         {/* If user lands on protected tab while unauthenticated, show Lock Screen Gate */}
@@ -260,6 +337,7 @@ export const App: React.FC = () => {
                 lang={lang} 
                 currentUser={currentUser}
                 onRequireAuth={handleRequireAuth}
+                onListProduce={handleListLotFromMandi}
               />
             )}
             {activeTab === 'farmer' && (
@@ -268,6 +346,7 @@ export const App: React.FC = () => {
                 onNavigateToRFQs={(lot) => handleNavigateToNegotiation(lot)} 
                 lang={lang}
                 onRequireAuth={handleRequireAuth}
+                initialLotPrefill={prefillLotData}
               />
             )}
             {activeTab === 'buyer' && (

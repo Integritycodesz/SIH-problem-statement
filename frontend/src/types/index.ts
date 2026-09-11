@@ -8,6 +8,7 @@ export type UserRole = 'FARMER' | 'BUYER' | 'OFFICIAL' | 'FPO';
 
 export interface User {
   id: number;
+  auth_user_id?: string;
   name: string;
   phone: string;
   email?: string;
@@ -18,6 +19,16 @@ export interface User {
   rating: number;
   created_at: string;
 }
+
+export interface AuthSignUpData {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  role: UserRole;
+  district: string;
+}
+
 
 export interface Mandi {
   id: number;
@@ -44,6 +55,19 @@ export interface CommodityPrice {
   arrivals_tonnes: number;
   change_24h: number;
   price_date: string;
+}
+
+export interface GovMandiRecord {
+  state: string;
+  district: string;
+  market: string;
+  commodity: string;
+  variety: string;
+  grade: string;
+  arrival_date: string;
+  min_price: number;
+  max_price: number;
+  modal_price: number;
 }
 
 export interface ProduceLot {
@@ -208,5 +232,93 @@ export interface AgriNotification {
   type: 'RFQ' | 'ESCROW' | 'PRICE' | 'DISPUTE';
   read: boolean;
   linkTab?: string;
+}
+
+export interface CACPMSPRecord {
+  commodity: string;
+  variety?: string;
+  category: 'Kharif' | 'Rabi' | 'Commercial' | 'Horticulture (MIS)';
+  msp_price: number;
+  cost_a2_fl: number;
+  margin_percent: number;
+  crop_year: string;
+  statutory_body: string;
+  season: string;
+  bonus?: number;
+  is_statutory: boolean;
+  notes?: string;
+}
+
+// ==========================================
+// OPTION 1: FPO BATCH POOLING & AGGREGATION
+// ==========================================
+
+export interface FPOBatchMember {
+  farmer_id: number;
+  farmer_name: string;
+  farmer_phone: string;
+  district: string;
+  quantity_quintals: number;
+  lot_id?: number;
+  grade: string;
+  payout_share_percent: number;
+  joined_at: string;
+}
+
+export interface FPOPooledBatch {
+  id: number;
+  fpo_name: string;
+  fpo_registration_number: string;
+  fpo_contact_person: string;
+  fpo_contact_phone: string;
+  district: string;
+  state: string;
+  central_hub_location: string;
+  commodity: string;
+  variety: string;
+  quality_grade: string;
+  target_volume_quintals: number;
+  collected_volume_quintals: number;
+  unit_base_price: number;
+  status: 'OPEN_FOR_CONTRIBUTIONS' | 'READY_FOR_INSTITUTIONAL_RFQ' | 'UNDER_CONTRACT' | 'DISPATCHED';
+  members: FPOBatchMember[];
+  created_at: string;
+  expected_fulfillment_date: string;
+  description: string;
+  fpo_certified: boolean;
+  assay_certificate_id?: string;
+}
+
+// ==========================================
+// OPTION 2: KISAN VISION AI QUALITY ASSAY
+// ==========================================
+
+export interface AIQualityAssayMetric {
+  name: string;
+  measured_value: string | number;
+  benchmark_range: string;
+  status: 'OPTIMAL' | 'PASS' | 'DEFICIENT';
+}
+
+export interface AIQualityAssayResult {
+  assay_id: string;
+  timestamp: string;
+  commodity: string;
+  sample_name: string;
+  predicted_grade: 'Grade A (Export / Modern Retail)' | 'Grade B (Domestic APMC Grade)' | 'Grade C (Industrial / Processing)';
+  grade_code: 'A' | 'B' | 'C';
+  confidence_score: number; // 0 - 100%
+  average_diameter_mm: number;
+  uniformity_score: number; // 0 - 100%
+  blemish_percentage: number;
+  estimated_moisture_percent: number;
+  sprouting_or_damage_detected: boolean;
+  color_pigmentation_score: number; // 0 - 100%
+  codex_standards_compliant: boolean;
+  suggested_price_multiplier: number; // e.g. 1.08
+  metrics: AIQualityAssayMetric[];
+  detected_count: number;
+  recommendations: string[];
+  image_url?: string;
 }
 

@@ -24,19 +24,105 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured()
   : null;
 
 /**
+ * Sign up a new user with Supabase Auth and metadata.
+ */
+export const signUpWithSupabase = async (signUpData: {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  role: string;
+  district: string;
+}) => {
+  if (!supabase) throw new Error('Supabase client is not configured.');
+  
+  const { data, error } = await supabase.auth.signUp({
+    email: signUpData.email,
+    password: signUpData.password,
+    options: {
+      data: {
+        name: signUpData.name,
+        phone: signUpData.phone,
+        role: signUpData.role,
+        district: signUpData.district,
+      },
+    },
+  });
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Sign in existing user with email and password via Supabase Auth.
+ */
+export const signInWithSupabase = async (email: string, password: string) => {
+  if (!supabase) throw new Error('Supabase client is not configured.');
+  
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Sign out the currently active Supabase session.
+ */
+export const signOutSupabase = async () => {
+  if (!supabase) return;
+  const { error } = await supabase.auth.signOut();
+  if (error) console.warn('[Supabase Auth] Sign out warning:', error.message);
+};
+
+/**
+ * Get active Supabase Auth session.
+ */
+export const getSupabaseSession = async () => {
+  if (!supabase) return null;
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) {
+    console.warn('[Supabase Auth] Session fetch error:', error.message);
+    return null;
+  }
+  return session;
+};
+
+/**
+ * Listen for Supabase Auth state changes.
+ */
+export const onSupabaseAuthStateChange = (
+  callback: (event: string, session: any) => void
+) => {
+  if (!supabase) return { unsubscribe: () => {} };
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    callback(event, session);
+  });
+  return subscription;
+};
+
+
+export interface SafeSubscription {
+  unsubscribe: () => void;
+}
+
+/**
  * Subscribe to realtime price updates across mandis.
  * Triggers when new price records are inserted or updated.
  */
 export const subscribeToCommodityPrices = (
   onUpdate: (payload: any) => void
-): RealtimeChannel | null => {
+): SafeSubscription | null => {
   if (!supabase) {
     console.debug('[Supabase Realtime] Not configured; skipping realtime price listener');
     return null;
   }
 
+  const chName = `prices_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const channel = supabase
-    .channel('realtime:commodity_prices')
+    .channel(chName)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'commodity_prices' },
@@ -47,7 +133,15 @@ export const subscribeToCommodityPrices = (
     )
     .subscribe();
 
-  return channel;
+  return {
+    unsubscribe: () => {
+      try {
+        if (supabase && channel) supabase.removeChannel(channel);
+      } catch (err) {
+        console.debug('Error removing price channel:', err);
+      }
+    }
+  };
 };
 
 /**
@@ -56,14 +150,15 @@ export const subscribeToCommodityPrices = (
 export const subscribeToRFQSession = (
   rfqId: number,
   onUpdate: (payload: any) => void
-): RealtimeChannel | null => {
+): SafeSubscription | null => {
   if (!supabase) {
     console.debug('[Supabase Realtime] Not configured; skipping realtime RFQ listener');
     return null;
   }
 
+  const chName = `rfq_${rfqId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const channel = supabase
-    .channel(`realtime:rfq:${rfqId}`)
+    .channel(chName)
     .on(
       'postgres_changes',
       {
@@ -92,7 +187,15 @@ export const subscribeToRFQSession = (
     )
     .subscribe();
 
-  return channel;
+  return {
+    unsubscribe: () => {
+      try {
+        if (supabase && channel) supabase.removeChannel(channel);
+      } catch (err) {
+        console.debug('Error removing RFQ channel:', err);
+      }
+    }
+  };
 };
 
 /**
@@ -101,11 +204,12 @@ export const subscribeToRFQSession = (
 export const subscribeToContractUpdates = (
   contractId: number,
   onUpdate: (payload: any) => void
-): RealtimeChannel | null => {
+): SafeSubscription | null => {
   if (!supabase) return null;
 
+  const chName = `contract_${contractId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const channel = supabase
-    .channel(`realtime:contract:${contractId}`)
+    .channel(chName)
     .on(
       'postgres_changes',
       {
@@ -134,7 +238,15 @@ export const subscribeToContractUpdates = (
     )
     .subscribe();
 
-  return channel;
+  return {
+    unsubscribe: () => {
+      try {
+        if (supabase && channel) supabase.removeChannel(channel);
+      } catch (err) {
+        console.debug('Error removing contract channel:', err);
+      }
+    }
+  };
 };
 
 /**
