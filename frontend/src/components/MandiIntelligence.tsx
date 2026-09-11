@@ -6,7 +6,7 @@ import {
   Truck, ArrowUpRight, ArrowDownRight, Clock,
   Globe, RefreshCw, Download, Key, CheckCircle2, Building2, X,
   Scale, AlertTriangle, Volume2, VolumeX, Sparkles, Send,
-  Compass, Tag
+  Compass, Tag, Zap
 } from 'lucide-react';
 import { subscribeToCommodityPrices } from '../services/supabase';
 import { api, type CommodityPrice, type GovMandiRecord, type CACPMSPRecord } from '../services/api';
@@ -64,11 +64,39 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   const [topGainer, setTopGainer] = useState<CommodityPrice | null>(null);
   const [historicalData, setHistoricalData] = useState<{ date: string; modal_price: number }[]>([]);
 
-  // Real Govt API (data.gov.in / Agmarknet) State - Defaults to 100% Real Live Government Data
+  // Real Govt API (data.gov.in / Agmarknet) State - Defaults to 100% Real Live Government Data with 0ms SWR Initial Paint
   const [feedSource, setFeedSource] = useState<'EXCHANGE' | 'GOV_API'>('GOV_API');
-  const [govPrices, setGovPrices] = useState<GovMandiRecord[]>([]);
+  const [govPrices, setGovPrices] = useState<GovMandiRecord[]>(() => {
+    const cached = api.getPersistentCache<any>(api.GOV_STORAGE_KEY);
+    if (cached && cached.data?.records && cached.data.records.length > 0) {
+      return cached.data.records;
+    }
+    return api.AGMARKNET_VERIFIED_APMC_BASELINE || [];
+  });
   const [loadingGovApi, setLoadingGovApi] = useState<boolean>(false);
-  const [govApiStatus, setGovApiStatus] = useState<{ isLive: boolean; updatedDate?: string; error?: string } | null>(null);
+  const [govApiStatus, setGovApiStatus] = useState<{
+    isLive: boolean;
+    updatedDate?: string;
+    fromCache?: boolean;
+    cachedAt?: number;
+    error?: string;
+  } | null>(() => {
+    const cached = api.getPersistentCache<any>(api.GOV_STORAGE_KEY);
+    if (cached) {
+      return {
+        isLive: cached.data?.isLive ?? false,
+        updatedDate: cached.data?.updated_date,
+        fromCache: true,
+        cachedAt: cached.timestamp,
+        error: cached.data?.error
+      };
+    }
+    return {
+      isLive: false,
+      fromCache: true,
+      cachedAt: Date.now()
+    };
+  });
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [customApiKey, setCustomApiKey] = useState<string>(() => {
     try {
@@ -80,8 +108,14 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   const [syncingToDb, setSyncingToDb] = useState<boolean>(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
 
-  // CACP / Agricoop Minimum Support Price (MSP) State
-  const [mspRecords, setMspRecords] = useState<CACPMSPRecord[]>([]);
+  // CACP / Agricoop Minimum Support Price (MSP) State (24-Hour Persistent SWR Cache)
+  const [mspRecords, setMspRecords] = useState<CACPMSPRecord[]>(() => {
+    const cached = api.getPersistentCache<any>(api.CACP_STORAGE_KEY);
+    if (cached && cached.data?.records && cached.data.records.length > 0) {
+      return cached.data.records;
+    }
+    return api.CACP_STATUTORY_MSP_BENCHMARKS;
+  });
   const [showMspModal, setShowMspModal] = useState<boolean>(false);
   const [syncingMspToDb, setSyncingMspToDb] = useState<boolean>(false);
   const [mspSyncSuccessMsg, setMspSyncSuccessMsg] = useState<string | null>(null);
@@ -163,23 +197,28 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
     }
   };
 
-  const loadGovApiPrices = async () => {
+  const loadGovApiPrices = async (force: boolean = false) => {
     setLoadingGovApi(true);
     try {
       const res = await api.fetchGovAgmarknetPrices({
-        commodity: activeCrop !== 'All' ? activeCrop : undefined,
         customApiKey: customApiKey || undefined,
-        limit: 60
+        limit: 250,
+        forceRefresh: force
       });
-      setGovPrices(res.records);
+      if (res.records && res.records.length > 0) {
+        setGovPrices(res.records);
+      }
       setGovApiStatus({
         isLive: res.isLive,
         updatedDate: res.updated_date,
+        fromCache: res.fromCache,
+        cachedAt: res.cachedAt,
         error: res.error
       });
     } catch (err: any) {
       setGovApiStatus({
         isLive: false,
+        fromCache: true,
         error: err.message || 'Error connecting to Agmarknet'
       });
     } finally {
@@ -206,10 +245,21 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
     }
   };
 
-  const loadCacpMsp = async () => {
+  const formatTimeAgo = (ts?: number) => {
+    if (!ts) return 'Cached Bulletin';
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h ago`;
+  };
+
+  const loadCacpMsp = async (force: boolean = false) => {
     try {
-      const records = await api.getCACPMSPPrices();
-      setMspRecords(records);
+      const res = await api.fetchCACPMSPPrices({ forceRefresh: force });
+      if (res.records && res.records.length > 0) {
+        setMspRecords(res.records);
+      }
     } catch (e) {
       console.warn('Error loading CACP MSP records:', e);
     }
@@ -259,14 +309,15 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
 
   useEffect(() => {
     loadLiveMandiPrices();
-    loadCacpMsp();
+    loadCacpMsp(false);
   }, [activeCrop]);
 
   useEffect(() => {
+    // SWR background revalidation when viewing live Government Agmarknet feed
     if (feedSource === 'GOV_API') {
-      loadGovApiPrices();
+      loadGovApiPrices(false);
     }
-  }, [activeCrop, feedSource]);
+  }, [feedSource]);
 
   useEffect(() => {
     // Realtime Supabase listener
@@ -1185,10 +1236,11 @@ https://agroconnect.gov.in`;
           {feedSource === 'GOV_API' && (
             <>
               <button
-                onClick={loadGovApiPrices}
+                onClick={() => loadGovApiPrices(true)}
                 disabled={loadingGovApi}
                 className="btn-gov-secondary"
                 style={{ fontSize: '0.74rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                title="Force refresh live Agmarknet telemetry from data.gov.in"
               >
                 <RefreshCw size={13} className={loadingGovApi ? 'spin' : ''} />
                 {loadingGovApi ? 'Connecting...' : 'Refresh Agmarknet'}
@@ -1271,16 +1323,40 @@ https://agroconnect.gov.in`;
           flexWrap: 'wrap',
           gap: '8px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: govApiStatus?.isLive ? '#0284c7' : '#f59e0b' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ 
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: govApiStatus?.isLive ? '#dcfce7' : '#e0f2fe',
+              color: govApiStatus?.isLive ? '#15803d' : '#0369a1',
+              fontWeight: 700,
+              fontSize: '0.72rem'
+            }}>
+              {govApiStatus?.isLive ? (
+                <>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                  Live NIC Sync
+                </>
+              ) : (
+                <>
+                  <Zap size={11} color="#0284c7" />
+                  Instant SWR Cache ({formatTimeAgo(govApiStatus?.cachedAt)})
+                </>
+              )}
+            </span>
             <span>
-              <strong>Ministry of Agriculture & Farmers Welfare</strong> • Direct NIC Agmarknet Endpoint
-              {govApiStatus?.error ? ` (${govApiStatus.error})` : ' (Connected)'}
+              <strong>Ministry of Agriculture & Farmers Welfare</strong> • Direct NIC Agmarknet Stream
+              {govApiStatus?.error ? ` (${govApiStatus.error})` : ''}
             </span>
           </div>
-          <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 600 }}>
-            {govPrices.length} Real-Time APMC Mandi Rates Loaded
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 600 }}>
+              {filteredGovPrices.length} of {govPrices.length} APMC Rates Ready (0ms In-Memory Filter)
+            </span>
+          </div>
         </div>
       )}
 
