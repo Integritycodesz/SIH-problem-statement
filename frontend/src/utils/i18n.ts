@@ -133,6 +133,26 @@ export interface TranslationDict {
   issueRulingBtn: string;
   escalateToTier2Btn: string;
   escalateToTier3Btn: string;
+
+  // Gap 4: AI Matchmaker
+  aiMatchTitle: string;
+  aiMatchBadge: string;
+  pitchLotBtn: string;
+  pitchModalTitle: string;
+  confirmPitchBtn: string;
+  pitchPriceLabel: string;
+
+  // Gap 5: Logistics & Gate Pass
+  logisticsCoordinationTitle: string;
+  eGatePassTitle: string;
+  bookTransporter: string;
+  printGatePass: string;
+  driverName: string;
+  vehicleNumber: string;
+  vehicleType: string;
+  transporterAgency: string;
+  driverPhone: string;
+  advanceTransitStage: string;
 }
 
 export const translations: Record<Language, TranslationDict> = {
@@ -261,7 +281,27 @@ export const translations: Record<Language, TranslationDict> = {
     agreedSettlement: 'Agreed Settlement',
     issueRulingBtn: 'Issue APMC Arbitrated Settlement',
     escalateToTier2Btn: 'Escalate to Tier 2 (APMC Secretary)',
-    escalateToTier3Btn: 'Escalate to Tier 3 (MSAMB Appellate Panel)'
+    escalateToTier3Btn: 'Escalate to Tier 3 (MSAMB Appellate Panel)',
+
+    // Gap 4: AI Matchmaker
+    aiMatchTitle: 'AI Matched Verified Buyers',
+    aiMatchBadge: 'AI Match',
+    pitchLotBtn: 'Pitch Lot',
+    pitchModalTitle: 'Send Direct Lot Pitch to Matched Buyer',
+    confirmPitchBtn: 'Send Direct Lot Pitch',
+    pitchPriceLabel: 'Pitched Price (₹/Quintal)',
+
+    // Gap 5: Logistics & Gate Pass
+    logisticsCoordinationTitle: 'Logistics Coordination & Transit Stepper',
+    eGatePassTitle: 'APMC Electronic Gate Pass & Weighbridge QR',
+    bookTransporter: 'Book Transporter / Truck',
+    printGatePass: 'Print APMC e-Gate Pass',
+    driverName: 'Driver Name',
+    vehicleNumber: 'Vehicle Registration Number',
+    vehicleType: 'Vehicle Type',
+    transporterAgency: 'Transporter Agency',
+    driverPhone: 'Driver Contact Phone',
+    advanceTransitStage: 'Advance Transit Milestone'
   },
   MR: {
     appTitle: 'ॲग्रो-कनेक्ट',
@@ -388,6 +428,26 @@ export const translations: Record<Language, TranslationDict> = {
     agreedSettlement: 'अंतिम मंजूर तडजोड',
     issueRulingBtn: 'बाजार समिती लवाद निर्णय द्या',
     escalateToTier2Btn: 'स्तर २ (बाजार समिती सचिव) कडे वर्ग करा',
-    escalateToTier3Btn: 'स्तर ३ (MSAMB राज्य पॅनेल) कडे वर्ग करा'
+    escalateToTier3Btn: 'स्तर ३ (MSAMB राज्य पॅनेल) कडे वर्ग करा',
+
+    // Gap 4: AI Matchmaker
+    aiMatchTitle: 'एआय पडताळणी केलेले संस्थात्मक खरेदीदार',
+    aiMatchBadge: 'एआय मॅच',
+    pitchLotBtn: 'शेतमाल ऑफर पाठवा',
+    pitchModalTitle: 'पडताळणी केलेल्या खरेदीदाराला थेट शेतमाल ऑफर पाठवा',
+    confirmPitchBtn: 'थेट ऑफर पाठवा',
+    pitchPriceLabel: 'ऑफर दर (रु./क्विंटल)',
+
+    // Gap 5: Logistics & Gate Pass
+    logisticsCoordinationTitle: 'वाहतूक समन्वय व थेट ट्रॅकिंग',
+    eGatePassTitle: 'शासकीय APMC ई-गेट पास व वजनकाटा QR',
+    bookTransporter: 'वाहन / ट्रक बुक करा',
+    printGatePass: 'ई-गेट पास प्रिंट करा',
+    driverName: 'चालकाचे नाव',
+    vehicleNumber: 'गाडी क्रमांक',
+    vehicleType: 'वाहनाचा प्रकार',
+    transporterAgency: 'वाहतूकदार संस्था',
+    driverPhone: 'चालकाचा फोन',
+    advanceTransitStage: 'पुढील टप्पा नोंदवा'
   }
 };

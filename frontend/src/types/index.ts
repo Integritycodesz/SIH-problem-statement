@@ -322,3 +322,129 @@ export interface AIQualityAssayResult {
   image_url?: string;
 }
 
+// ==========================================
+// STORAGE & POST-HARVEST PRESERVATION
+// ==========================================
+
+export interface StorageFacility {
+  id: number;
+  name: string;
+  facility_type: 'COLD_STORAGE' | 'WDRA_GODOWN' | 'APMC_WAREHOUSE' | 'CA_STORE';
+  district: string;
+  taluka?: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+  total_capacity_mt: number;
+  available_capacity_mt: number;
+  daily_rent_per_quintal: number;
+  temperature_celsius?: number;
+  humidity_percent?: number;
+  is_wdra_accredited: boolean;
+  enwr_pledge_eligible: boolean;
+  contact_person?: string;
+  contact_phone?: string;
+  created_at?: string;
+}
+
+export interface QualityAssay {
+  id: number;
+  certificate_id: string;
+  lot_id?: number | null;
+  farmer_id?: number | null;
+  commodity: string;
+  variety?: string;
+  overall_grade: string;
+  moisture_percent: number;
+  color_uniformity_score: number;
+  defect_percentage: number;
+  purity_index: number;
+  sample_image_url?: string;
+  assayed_at: string;
+}
+
+export interface CACPMSPBenchmark {
+  id: number;
+  commodity: string;
+  variety?: string;
+  crop_year: string;
+  season: string;
+  msp_price: number;
+  cost_a2_fl?: number;
+  return_over_cost_pct?: number;
+  statutory_body?: string;
+  effective_date?: string;
+}
+
+// ==========================================
+// GAP 4: AI BUYER MATCHMAKING ENGINE
+// ==========================================
+
+export interface BuyerMatch {
+  buyer_id: number;
+  buyer_name: string;
+  company_name: string;
+  district: string;
+  state: string;
+  hub_name: string;
+  distance_km: number;
+  rating: number;
+  kyc_verified: boolean;
+  escrow_verified: boolean;
+  msamb_license?: string;
+  standing_bid_price: number;
+  price_difference: number; // positive = premium above asking
+  commodity_preference: string;
+  variety_preference?: string;
+  moisture_spec_max: number;
+  min_grade: string;
+  match_score: number; // 0 - 100%
+  match_reasons: string[];
+  contact_phone?: string;
+  prompt_pitch_text?: string;
+}
+
+// ==========================================
+// GAP 5: LOGISTICS COORDINATION & GATE PASS
+// ==========================================
+
+export type LogisticsStatus = 
+  | 'BOOKED' 
+  | 'DISPATCHED_FARMGATE' 
+  | 'WEIGHBRIDGE_SCANNED' 
+  | 'APMC_WEIGHBRIDGE_SCANNED'
+  | 'DELIVERED_UNLOADED'
+  | 'DELIVERED_ACCEPTED';
+
+export interface LogisticsBooking {
+  id: number;
+  contract_id?: number | null;
+  contract_number?: string | null;
+  lot_id?: number | null;
+  gate_pass_code: string;
+  transporter_name: string;
+  transporter_contact?: string | null;
+  vehicle_number: string;
+  vehicle_type: string;
+  driver_name: string;
+  driver_phone: string;
+  driver_license?: string | null;
+  pickup_location: string;
+  delivery_location: string;
+  distance_km: number;
+  estimated_transit_hours: number;
+  freight_charge: number;
+  gross_weight_quintals?: number | null;
+  tare_weight_quintals?: number | null;
+  net_weight_quintals: number;
+  status: LogisticsStatus;
+  dispatched_at?: string | null;
+  weighbridge_scanned_at?: string | null;
+  delivered_at?: string | null;
+  security_hash: string;
+  qr_payload_json?: string | null;
+  created_at: string;
+  farmer_name?: string | null;
+  buyer_name?: string | null;
+  commodity?: string | null;
+}
