@@ -275,3 +275,41 @@ export const subscribeToDisputes = (
 
   return channel;
 };
+
+/**
+ * Subscribe to Reverse RFQ Buyer Demands live feed.
+ * Triggers in realtime when processors or institutional buyers post or fulfill demands.
+ */
+export const subscribeToBuyerDemands = (
+  onUpdate: (payload: any) => void
+): SafeSubscription | null => {
+  if (!supabase) return null;
+
+  const chName = `buyer_demands_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const channel = supabase
+    .channel(chName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'buyer_demands',
+      },
+      (payload) => {
+        console.log('[Supabase Realtime] Buyer demand event received:', payload);
+        onUpdate(payload);
+      }
+    )
+    .subscribe();
+
+  return {
+    unsubscribe: () => {
+      try {
+        if (supabase && channel) supabase.removeChannel(channel);
+      } catch (err) {
+        console.debug('Error removing buyer demands channel:', err);
+      }
+    }
+  };
+};
+

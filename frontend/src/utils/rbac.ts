@@ -45,7 +45,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: false,
     canArbitrateDispute: false,
     canEscalateDispute: false,
-    primaryTabs: ['intelligence'],
+    primaryTabs: ['intelligence', 'demands'],
     defaultTab: 'intelligence'
   },
   FARMER: {
@@ -67,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: false,
     canEscalateDispute: true,
-    primaryTabs: ['farmer', 'rfq', 'intelligence', 'contracts', 'disputes'],
+    primaryTabs: ['farmer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
     defaultTab: 'farmer'
   },
   FPO: {
@@ -89,7 +89,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: false,
     canEscalateDispute: true,
-    primaryTabs: ['farmer', 'rfq', 'intelligence', 'contracts', 'disputes'],
+    primaryTabs: ['farmer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
     defaultTab: 'farmer'
   },
   BUYER: {
@@ -111,8 +111,8 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: false,
     canEscalateDispute: true,
-    primaryTabs: ['buyer', 'rfq', 'intelligence', 'contracts', 'disputes'],
-    defaultTab: 'buyer'
+    primaryTabs: ['demands', 'buyer', 'rfq', 'intelligence', 'contracts', 'disputes'],
+    defaultTab: 'demands'
   },
   OFFICIAL: {
     role: 'OFFICIAL',
@@ -133,13 +133,13 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: true,
     canEscalateDispute: true,
-    primaryTabs: ['disputes', 'contracts', 'intelligence', 'farmer', 'buyer'],
+    primaryTabs: ['disputes', 'demands', 'contracts', 'intelligence', 'farmer', 'buyer'],
     defaultTab: 'disputes'
   },
   ADMIN: {
     role: 'ADMIN',
-    titleEn: 'State Super Admin',
-    titleMr: 'प्रशासक (Admin)',
+    titleEn: 'State Super-Admin (MSIS)',
+    titleMr: 'राज्य प्रशासक',
     badgeBg: '#fdf2f8',
     badgeColor: '#9d174d',
     badgeBorder: '#fbcfe8',
@@ -155,7 +155,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: true,
     canEscalateDispute: true,
-    primaryTabs: ['intelligence', 'farmer', 'buyer', 'rfq', 'contracts', 'disputes'],
+    primaryTabs: ['intelligence', 'demands', 'farmer', 'buyer', 'rfq', 'contracts', 'disputes'],
     defaultTab: 'intelligence'
   }
 };

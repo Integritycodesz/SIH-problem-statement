@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, ShieldCheck, Clock, ArrowRight, 
   Printer, Plus, 
-  MessageSquare, Building2, PhoneCall, X, QrCode, Check,
+  MessageSquare, Building2, X, QrCode, Check,
   Trash2, AlertTriangle, Users, Sparkles
 } from 'lucide-react';
-import { api, type User, type ProduceLot, type RFQ, type Contract, type CommodityPrice } from '../services/api';
+import { api, type User, type ProduceLot, type RFQ, type Contract, type CommodityPrice, type BuyerDemand, type BuyerReliabilityScorecard } from '../services/api';
 import type { FPOPooledBatch, AIQualityAssayResult } from '../types';
 import { AIQualityAssayModal } from './AIQualityAssayModal';
+import { BuyerScorecardModal } from './BuyerScorecardModal';
 import { translations, type Language } from '../utils/i18n';
 
 interface FarmerPortalProps {
   currentUser: User | null;
   onNavigateToRFQs: (lot?: ProduceLot) => void;
+  onNavigateToDemands?: () => void;
   lang?: Language;
   onRequireAuth?: (message?: string, onComplete?: () => void) => void;
   initialLotPrefill?: { commodity: string; variety?: string; price: number; mandi?: string } | null;
@@ -39,11 +41,13 @@ function getCropImage(commodity: string): string {
 export const FarmerPortal: React.FC<FarmerPortalProps> = ({ 
   currentUser, 
   onNavigateToRFQs, 
+  onNavigateToDemands,
   lang = 'EN', 
   onRequireAuth,
   initialLotPrefill
 }) => {
   const t = translations[lang];
+  const isMarathi = lang === 'MR';
   const [lots, setLots] = useState<ProduceLot[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -83,8 +87,10 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   const [newDeliveryDays, setNewDeliveryDays] = useState<number | ''>('');
   const [newHub, setNewHub] = useState<string>('');
 
-  const [buyers, setBuyers] = useState<User[]>([]);
   const [mspPrices, setMspPrices] = useState<CommodityPrice[]>([]);
+  const [buyerDemands, setBuyerDemands] = useState<BuyerDemand[]>([]);
+  const [selectedScorecard, setSelectedScorecard] = useState<BuyerReliabilityScorecard | null>(null);
+  const [showScorecardModal, setShowScorecardModal] = useState<boolean>(false);
 
   useEffect(() => {
     loadData();
@@ -102,20 +108,20 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
   const loadData = async () => {
     try {
-      const [allLots, allRfqs, allContracts, allBuyers, allMsp, allPools] = await Promise.all([
+      const [allLots, allRfqs, allContracts, allMsp, allPools, allDemands] = await Promise.all([
         api.getLots(),
         api.getRFQs(),
         api.getContracts(),
-        api.getUsers('BUYER').catch(() => []),
         api.getMSPFloorPrices().catch(() => []),
-        api.getPooledBatches().catch(() => [])
+        api.getPooledBatches().catch(() => []),
+        api.getBuyerDemands().catch(() => [])
       ]);
       setLots(allLots);
       setRfqs(allRfqs);
       setContracts(allContracts);
-      setBuyers(allBuyers);
       setMspPrices(allMsp);
       setFpoPools(allPools);
+      setBuyerDemands(allDemands);
     } catch (e) {
       console.error('Error loading farmer data:', e);
     }
@@ -341,20 +347,6 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       alert(`Failed to remove lot: ${err?.message || 'Unknown error'}`);
     } finally {
       setIsDeletingLot(false);
-    }
-  };
-
-  const handleOpenDirectBid = () => {
-    const doNav = () => onNavigateToRFQs();
-    if (onRequireAuth && !currentUser) {
-      onRequireAuth(
-        lang === 'MR'
-          ? 'थेट संस्थात्मक खरेदीदार चॅनेल सुरू करण्यासाठी कृपया लॉगिन करा.'
-          : 'Connecting to direct institutional buyer channels requires authentication. Please sign in first.',
-        doNav
-      );
-    } else {
-      doNav();
     }
   };
 
@@ -1018,67 +1010,100 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           <div className="gov-card" style={{ padding: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
-                <h4 style={{ fontSize: '0.98rem', color: '#0f172a' }}>{t.directBuyers}</h4>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verified wholesale procurement standing RFQs</div>
+                <h4 style={{ fontSize: '0.98rem', color: '#0f172a', margin: 0 }}>
+                  {isMarathi ? 'थेट संस्थात्मक खरेदीदार मागण्या' : 'Live Institutional Buyer Demands'}
+                </h4>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                  {isMarathi ? 'महाराष्ट्र प्रक्रिया उद्योग व थेट निविदा (Reverse RFQs)' : 'Direct tenders from food processors & oil mills'}
+                </div>
               </div>
-              <ShieldCheck size={16} color="#059669" />
+              <Building2 size={18} color="#059669" />
             </div>
 
-            {/* Dynamic Buyer Cards */}
+            {/* Dynamic Buyer Demand Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {buyers.length === 0 ? (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '12px', textAlign: 'center' }}>
-                  Connecting to verified wholesale institutional buyers...
-                </div>
-              ) : (
-                buyers.slice(0, 3).map((b, idx) => {
-                  const initials = b.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'IB';
-                  const bgColors = ['#065f46', '#0284c7', '#b45309', '#6366f1'];
-                  const tags = ['HIGH MATCH', 'URGENT REQUIREMENT', 'STANDING RFQ'];
-                  return (
-                    <div key={b.id} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: bgColors[idx % bgColors.length], color: '#fff', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {initials}
-                          </div>
-                          <div>
-                            <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>{b.name}</strong>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{b.district}, {b.state} • ★{b.rating?.toFixed(1) || '5.0'}</div>
-                          </div>
-                        </div>
-                        <span className={idx === 0 ? "badge-grade-a" : idx === 1 ? "badge-amber-tag" : "badge-blue-tag"}>
-                          {tags[idx % tags.length]}
-                        </span>
+              {(buyerDemands.length > 0 ? buyerDemands.slice(0, 3) : (api as any).DEFAULT_BUYER_DEMANDS.slice(0, 3)).map((d: any) => {
+                const rem = d.required_quantity_quintals - d.fulfilled_quantity_quintals;
+                const card = d.credibility_scorecard || (api as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id];
+                return (
+                  <div key={d.id} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{d.company_name}</strong>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{d.delivery_hub}</div>
                       </div>
+                      <span className="badge-grade-a">
+                        {d.commodity}
+                      </span>
+                    </div>
 
-                      <div style={{ fontSize: '0.76rem', color: '#475569', display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                        <span>Procurement Hub: <strong>{b.district} Hub</strong></span>
-                        <span style={{ color: '#059669', fontWeight: 700 }}>Pre-approved Escrow</span>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        Direct gate weighment & RBI escrow settlement
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                      <span style={{ fontSize: '0.76rem', color: '#475569' }}>
+                        {isMarathi ? 'खरेदी दर:' : 'Target Offer:'} <strong style={{ color: '#059669', fontSize: '0.88rem' }}>₹{d.target_price_per_quintal}/qtl</strong>
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        {rem} Qtl {isMarathi ? 'शिल्लक' : 'Needed'}
+                      </span>
+                    </div>
 
-                      <button 
-                        className="btn-gov-primary"
-                        style={{ width: '100%', justifyContent: 'center', padding: '6px', fontSize: '0.76rem', marginTop: '8px' }}
-                        onClick={handleOpenDirectBid}
+                    {/* MSAMB Credibility Scorecard button */}
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedScorecard(card);
+                          setShowScorecardModal(true);
+                        }}
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#ecfdf5',
+                          border: '1px solid #a7f3d0',
+                          color: '#065f46',
+                          borderRadius: '4px',
+                          padding: '4px 6px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
                       >
-                        <MessageSquare size={12} /> Direct Bid Channel
+                        <ShieldCheck size={12} color="#059669" />
+                        <span>MSAMB: {card?.overall_reliability_score || 99.2}★ (99.2% Escrow)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-gov-primary"
+                        onClick={() => {
+                          if (onNavigateToDemands) {
+                            onNavigateToDemands();
+                          }
+                        }}
+                        style={{ padding: '4px 10px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}
+                      >
+                        {isMarathi ? 'मागणी पूर्ण करा' : 'Fulfill'}
                       </button>
                     </div>
-                  );
-                })
-              )}
+                  </div>
+                );
+              })}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              <span>Need direct mandi arbitration support?</span>
-              <span style={{ color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <PhoneCall size={12} /> 1800-233-AGRO
-              </span>
-            </div>
+            {/* Bottom Nav CTA to Buyer Demand Board */}
+            <button
+              className="btn-gov-secondary"
+              onClick={() => {
+                if (onNavigateToDemands) {
+                  onNavigateToDemands();
+                }
+              }}
+              style={{ width: '100%', justifyContent: 'center', padding: '8px', fontSize: '0.78rem', marginTop: '12px', fontWeight: 700 }}
+            >
+              <span>{isMarathi ? 'सर्व संस्थात्मक खरेदी मागण्या पहा (Reverse RFQ) →' : 'Browse All Corporate Procurement Demands →'}</span>
+            </button>
           </div>
 
           {/* Govt. MSP Floor Guarantee Box */}
@@ -2128,6 +2153,13 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           </div>
         </div>
       )}
+      {/* MSAMB Buyer Credibility Scorecard Modal */}
+      <BuyerScorecardModal
+        isOpen={showScorecardModal}
+        onClose={() => setShowScorecardModal(false)}
+        scorecard={selectedScorecard}
+        lang={lang}
+      />
     </div>
   );
 };

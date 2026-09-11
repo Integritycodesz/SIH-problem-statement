@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Bell, ChevronDown, Check, ShieldCheck, 
-  User as UserIcon, Zap, CheckCheck, Lock, LogOut
+  User as UserIcon, Zap, CheckCheck, Lock, LogOut, Building2
 } from 'lucide-react';
 import { api, type User, type AgriNotification } from '../services/api';
 import { isSupabaseConfigured, subscribeToCommodityPrices } from '../services/supabase';
@@ -345,6 +345,30 @@ export const Header: React.FC<HeaderProps> = ({
                   {lang === 'MR' ? 'माझे' : 'My'}
                 </span>
               )}
+            </button>
+          )}
+
+          {/* Buyer Demands (Reverse RFQ) — Accessible to all */}
+          {(rolePerms.primaryTabs.includes('demands') || !currentUser) && (
+            <button
+              onClick={() => onSelectTab('demands')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                backgroundColor: activeTab === 'demands' ? '#065f46' : 'transparent',
+                color: activeTab === 'demands' ? '#ffffff' : '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Building2 size={13} color={activeTab === 'demands' ? '#34d399' : '#059669'} />
+              <span>{t.demandsTab}</span>
+              <span style={{ fontSize: '0.62rem', backgroundColor: '#ea580c', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>
+                {lang === 'MR' ? 'थेट मागणी' : 'Tenders'}
+              </span>
             </button>
           )}
 

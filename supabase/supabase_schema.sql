@@ -120,8 +120,9 @@ CREATE TABLE IF NOT EXISTS public.rfq_messages (
 CREATE TABLE IF NOT EXISTS public.contracts (
     id BIGSERIAL PRIMARY KEY,
     contract_number VARCHAR(50) UNIQUE NOT NULL,
-    rfq_id BIGINT REFERENCES public.rfqs(id) ON DELETE CASCADE,
-    lot_id BIGINT REFERENCES public.produce_lots(id) ON DELETE CASCADE,
+    rfq_id BIGINT REFERENCES public.rfqs(id) ON DELETE SET NULL,
+    demand_id BIGINT REFERENCES public.buyer_demands(id) ON DELETE SET NULL,
+    lot_id BIGINT REFERENCES public.produce_lots(id) ON DELETE SET NULL,
     buyer_id BIGINT REFERENCES public.users(id) ON DELETE CASCADE,
     buyer_name VARCHAR(100) NOT NULL,
     farmer_id BIGINT REFERENCES public.users(id) ON DELETE CASCADE,
@@ -179,6 +180,60 @@ CREATE TABLE IF NOT EXISTS public.disputes (
     resolved_at TIMESTAMPTZ
 );
 
+-- 10. BUYER SCORECARDS TABLE (MSAMB Credibility Index)
+CREATE TABLE IF NOT EXISTS public.buyer_scorecards (
+    id BIGSERIAL PRIMARY KEY,
+    buyer_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+    company_name VARCHAR(120) NOT NULL,
+    company_type VARCHAR(40) NOT NULL,
+    msamb_license_number VARCHAR(80) NOT NULL UNIQUE,
+    license_validity VARCHAR(50) DEFAULT 'March 2028 (Active / Verified)',
+    overall_reliability_score NUMERIC(4, 1) DEFAULT 99.2,
+    credit_tier VARCHAR(30) DEFAULT 'AAA_PLATINUM',
+    escrow_on_time_rate NUMERIC(4, 1) DEFAULT 99.2,
+    avg_payment_release_hours NUMERIC(4, 1) DEFAULT 4.2,
+    total_deals_completed INT DEFAULT 48,
+    total_volume_cleared_quintals NUMERIC(12, 2) DEFAULT 42500.0,
+    total_escrow_disbursed_lakhs NUMERIC(10, 2) DEFAULT 216.5,
+    unresolved_disputes_count INT DEFAULT 0,
+    dispute_resolution_rate_pct NUMERIC(4, 1) DEFAULT 100.0,
+    default_rate_pct NUMERIC(4, 1) DEFAULT 0.0,
+    bank_nodal_partner VARCHAR(120) DEFAULT 'State Bank of India (MSAMB Dedicated Agri-Escrow Node)',
+    apmc_verified_depots TEXT DEFAULT 'Nagpur, Pune, Nashik, Akola, Vashi',
+    audited_year VARCHAR(20) DEFAULT 'FY 2025-26',
+    monthly_target_quintals NUMERIC(12, 2) DEFAULT 5000.0,
+    monthly_procured_quintals NUMERIC(12, 2) DEFAULT 3450.0,
+    target_commodity VARCHAR(80) DEFAULT 'Soybean',
+    apmc_benchmark_price_per_qtl NUMERIC(10, 2) DEFAULT 5220.0,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 11. BUYER DEMANDS TABLE (Reverse RFQs / Institutional Tenders)
+CREATE TABLE IF NOT EXISTS public.buyer_demands (
+    id BIGSERIAL PRIMARY KEY,
+    buyer_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+    buyer_name VARCHAR(100) NOT NULL,
+    company_name VARCHAR(120) NOT NULL,
+    company_type VARCHAR(40) NOT NULL,
+    commodity VARCHAR(80) NOT NULL,
+    variety VARCHAR(80) DEFAULT 'Grade A Standard',
+    required_quantity_quintals NUMERIC(10, 2) NOT NULL,
+    fulfilled_quantity_quintals NUMERIC(10, 2) DEFAULT 0.0,
+    target_price_per_quintal NUMERIC(10, 2) NOT NULL,
+    quality_grade_required VARCHAR(30) DEFAULT 'Grade A',
+    max_moisture_percent NUMERIC(4, 2) DEFAULT 10.0,
+    delivery_hub VARCHAR(120) NOT NULL,
+    delivery_deadline VARCHAR(80) NOT NULL,
+    delivery_deadline_days INT DEFAULT 7,
+    escrow_prefunded BOOLEAN DEFAULT TRUE,
+    status VARCHAR(30) DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'PARTIALLY_FULFILLED', 'FULFILLED', 'EXPIRED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE INDEX IF NOT EXISTS idx_buyer_demands_commodity ON public.buyer_demands(commodity);
+CREATE INDEX IF NOT EXISTS idx_buyer_demands_status ON public.buyer_demands(status);
+
 -- ====================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================
@@ -192,12 +247,16 @@ ALTER TABLE public.rfq_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contracts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.escrow_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.buyer_scorecards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.buyer_demands ENABLE ROW LEVEL SECURITY;
 
 -- Public read access for market discovery
 CREATE POLICY "Allow public read on mandis" ON public.mandis FOR SELECT USING (true);
 CREATE POLICY "Allow public read on commodity prices" ON public.commodity_prices FOR SELECT USING (true);
 CREATE POLICY "Allow public read on available produce lots" ON public.produce_lots FOR SELECT USING (true);
 CREATE POLICY "Allow public read on users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Allow public read on buyer scorecards" ON public.buyer_scorecards FOR SELECT USING (true);
+CREATE POLICY "Allow public read on buyer demands" ON public.buyer_demands FOR SELECT USING (true);
 
 -- Permissive authenticated / service access for transactions
 CREATE POLICY "Allow full access to rfqs" ON public.rfqs FOR ALL USING (true) WITH CHECK (true);
@@ -206,6 +265,8 @@ CREATE POLICY "Allow full access to contracts" ON public.contracts FOR ALL USING
 CREATE POLICY "Allow full access to escrow payments" ON public.escrow_payments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access to disputes" ON public.disputes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow write on produce lots" ON public.produce_lots FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access to buyer demands" ON public.buyer_demands FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow write on buyer scorecards" ON public.buyer_scorecards FOR ALL USING (true) WITH CHECK (true);
 
 -- ====================================================================
 -- ENABLE REALTIME PUBLICATION FOR LIVE FEEDS & RFQ ALERTS
@@ -219,5 +280,6 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.rfqs;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.contracts;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.disputes;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.buyer_demands;
   END IF;
 END $$;

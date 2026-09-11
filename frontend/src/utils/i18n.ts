@@ -9,6 +9,7 @@ export interface TranslationDict {
   mandiPricesTab: string;
   farmerProduceTab: string;
   marketplaceTab: string;
+  demandsTab: string;
   rfqTab: string;
   escrowContractsTab: string;
   disputesTab: string;
@@ -144,6 +145,7 @@ export const translations: Record<Language, TranslationDict> = {
     mandiPricesTab: 'Mandi Prices',
     farmerProduceTab: 'Farmer Produce',
     marketplaceTab: 'Marketplace',
+    demandsTab: 'Buyer Demands',
     rfqTab: 'Bilateral RFQ',
     escrowContractsTab: 'Escrow & Contracts',
     disputesTab: 'Help & Disputes',
@@ -271,6 +273,7 @@ export const translations: Record<Language, TranslationDict> = {
     mandiPricesTab: 'बाजार भाव',
     farmerProduceTab: 'शेतकरी शेतमाल',
     marketplaceTab: 'घाऊक बाजारपेठ',
+    demandsTab: 'खरेदीदार मागणी (Reverse RFQ)',
     rfqTab: 'द्विपक्षीय वाटाघाटी',
     escrowContractsTab: 'एस्क्रो व करार',
     disputesTab: 'तक्रार निवारण',

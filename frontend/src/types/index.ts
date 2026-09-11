@@ -138,8 +138,9 @@ export interface EscrowPayment {
 
 export interface Contract {
   id: number;
-  rfq_id: number;
-  lot_id: number;
+  rfq_id?: number | null;
+  lot_id?: number | null;
+  demand_id?: number | null;
   contract_number: string;
   farmer_id: number;
   farmer_name: string;
@@ -173,6 +174,8 @@ export interface Contract {
   created_at: string;
   updated_at: string;
   escrow?: EscrowPayment;
+  refraction_schedule?: RefractionSchedule;
+  refraction_result?: RefractionCalculationResult;
 }
 
 export interface Dispute {
@@ -321,4 +324,308 @@ export interface AIQualityAssayResult {
   recommendations: string[];
   image_url?: string;
 }
+
+// ==========================================
+// INSTITUTIONAL BUYER DEMAND & CREDIBILITY
+// ==========================================
+
+export interface BuyerReliabilityScorecard {
+  buyer_id: number;
+  company_name: string;
+  company_type: 'OIL_MILL' | 'FOOD_PROCESSOR' | 'EXPORTER' | 'RETAIL_CHAIN' | 'GINNING_MILL' | 'AGRI_CONGLOMERATE';
+  msamb_license_number: string;
+  license_validity: string;
+  overall_reliability_score: number; // e.g. 99.2
+  credit_tier: 'AAA_PLATINUM' | 'AA_GOLD' | 'A_VERIFIED';
+  escrow_on_time_rate: number; // 99.2%
+  avg_payment_release_hours: number; // 4.2 hours
+  total_deals_completed: number;
+  total_volume_cleared_quintals: number;
+  total_escrow_disbursed_lakhs: number;
+  unresolved_disputes_count: number; // 0
+  dispute_resolution_rate_pct: number; // 100.0%
+  default_rate_pct: number; // 0.0%
+  bank_nodal_partner: string;
+  apmc_verified_depots: string[];
+  audited_year: string;
+  monthly_target_quintals?: number;
+  monthly_procured_quintals?: number;
+  target_commodity?: string;
+  apmc_benchmark_price_per_qtl?: number;
+}
+
+export interface CorporateProcurementKPIs {
+  target_quintals: number;
+  procured_quintals: number;
+  fulfillment_pct: number;
+  wap_achieved_per_qtl: number;
+  apmc_benchmark_per_qtl: number;
+  savings_per_qtl: number;
+  total_net_savings_lakhs: number;
+  target_commodity: string;
+  active_contracts_count: number;
+}
+
+export interface BuyerDemand {
+  id: number;
+  buyer_id: number;
+  buyer_name: string;
+  company_name: string;
+  company_type: 'OIL_MILL' | 'FOOD_PROCESSOR' | 'EXPORTER' | 'RETAIL_CHAIN' | 'GINNING_MILL' | 'AGRI_CONGLOMERATE';
+  commodity: string;
+  variety: string;
+  required_quantity_quintals: number;
+  fulfilled_quantity_quintals: number;
+  target_price_per_quintal: number;
+  quality_grade_required: string;
+  max_moisture_percent: number;
+  delivery_hub: string;
+  delivery_deadline: string;
+  delivery_deadline_days: number;
+  escrow_prefunded: boolean;
+  status: 'OPEN' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'EXPIRED';
+  credibility_scorecard: BuyerReliabilityScorecard;
+  notes?: string;
+  created_at: string;
+  refraction_schedule?: RefractionSchedule;
+}
+
+// ==========================================
+// STATUTORY QUALITY REFRACTION & DEDUCTION MATRIX
+// ==========================================
+
+export interface RefractionSchedule {
+  commodity: string;
+  base_moisture_pct: number; // e.g., 10.0%
+  permissible_moisture_pct: number; // e.g., 12.0% (free of cut)
+  moisture_penalty_rate_pct: number; // e.g., 0.75% price cut per 1% excess
+  max_tolerable_moisture_pct: number; // e.g., 15.0% (rejection limit)
+  permissible_foreign_matter_pct: number; // e.g., 1.0% (standard base)
+  foreign_matter_penalty_mode: 'NET_WEIGHT_DEDUCTION' | 'PRICE_PERCENT_DEDUCTION';
+  permissible_damaged_grains_pct: number; // e.g., 2.0%
+  damaged_penalty_rate_pct: number; // e.g., 0.50% price cut per 1% excess
+  statutory_rule_ref: string; // 'APMC Model Act Rule 38 / AGMARK Standard'
+}
+
+export interface RefractionInputParams {
+  gross_weight_quintals: number;
+  base_price_per_quintal: number;
+  tested_moisture_pct: number;
+  tested_foreign_matter_pct: number;
+  tested_damaged_pct: number;
+}
+
+export interface RefractionCalculationResult {
+  schedule: RefractionSchedule;
+  params: RefractionInputParams;
+  
+  // Weight deductions
+  gross_weight_quintals: number;
+  foreign_matter_excess_pct: number;
+  foreign_matter_deduction_quintals: number;
+  net_weight_quintals: number;
+
+  // Price deductions
+  base_price_per_quintal: number;
+  moisture_excess_pct: number;
+  moisture_penalty_rate_applied_pct: number;
+  moisture_deduction_per_quintal: number;
+  
+  damaged_excess_pct: number;
+  damaged_penalty_rate_applied_pct: number;
+  damaged_deduction_per_quintal: number;
+  
+  total_price_deduction_per_quintal: number;
+  net_price_per_quintal: number;
+
+  // Financial Summary
+  gross_total_amount: number;
+  net_total_amount: number;
+  total_refraction_discount_amount: number;
+  effective_deduction_pct: number;
+
+  // Regulatory Status
+  acceptance_status: 'FULL_ACCEPTANCE' | 'STANDARD_REFRACTION_APPLIED' | 'HIGH_REFRACTION_WARNING' | 'REJECTION_RISK';
+  status_label_en: string;
+  status_label_mr: string;
+}
+
+// ==========================================
+// PHASE 3: MULTI-LOT CONSIGNMENT & TRUCKLOAD OPTIMIZER
+// ==========================================
+
+export type CommercialTruckType = 'MINI_TRUCK' | 'MEDIUM_COMMERCIAL' | 'MULTI_AXLE_HEAVY' | 'TRAILER_RIG';
+
+export interface VehicleOption {
+  type: CommercialTruckType;
+  name_en: string;
+  name_mr: string;
+  wheels: string;
+  capacity_quintals: number;
+  capacity_tonnes: number;
+  base_rate_per_km: number;
+  min_distance_km: number;
+  diesel_efficiency_kmpl: number;
+  carrier_partner: string;
+  driver_contact?: string;
+  vehicle_badge: string;
+}
+
+export interface PooledLotItem {
+  id: string | number;
+  farmer_id: number;
+  farmer_name: string;
+  farmer_phone: string;
+  village: string;
+  district: string;
+  commodity: string;
+  variety: string;
+  quantity_quintals: number;
+  pickup_order: number;
+  pickup_status: 'QUEUED' | 'LOADED' | 'DISPATCHED';
+  freight_share_inr: number;
+  individual_freight_inr: number;
+  freight_savings_inr: number;
+}
+
+export interface ConsignmentPool {
+  id: string;
+  pool_code: string; // AGC-TRUCK-2026-NAG-88
+  demand_id?: number;
+  destination_hub: string;
+  destination_mill: string;
+  commodity: string;
+  vehicle: VehicleOption;
+  carrier_name: string;
+  vehicle_number: string;
+  driver_name: string;
+  driver_phone: string;
+  total_capacity_quintals: number;
+  loaded_quantity_quintals: number;
+  utilization_percent: number;
+  total_distance_km: number;
+  total_freight_cost_inr: number;
+  pooled_cost_per_quintal: number;
+  individual_cost_per_quintal: number;
+  total_savings_inr: number;
+  status: 'OPEN_FOR_POOLING' | 'OPTIMAL_FULL' | 'DISPATCH_READY' | 'IN_TRANSIT' | 'ARRIVED_MILL_GATE';
+  lots: PooledLotItem[];
+  created_at: string;
+  dispatch_eta: string;
+  security_seal_number?: string;
+}
+
+// ==========================================
+// PHASE 4: DIGITAL GATE PASS & MILL WEIGHBRIDGE
+// ==========================================
+
+export type GatePassStatus = 
+  | 'GENERATED' 
+  | 'AT_MILL_GATE' 
+  | 'GROSS_WEIGHED' 
+  | 'QUALITY_ASSAYED' 
+  | 'TARE_WEIGHED' 
+  | 'PAYMENT_TRIGGERED' 
+  | 'COMPLETED';
+
+export interface DigitalGatePass {
+  id: string;
+  pass_number: string; // MH-GP-2026-NAG-4089
+  contract_id: number;
+  contract_number: string;
+  truck_number: string;
+  driver_name: string;
+  driver_phone: string;
+  carrier_name: string;
+  commodity: string;
+  variety: string;
+  farmer_id: number;
+  farmer_name: string;
+  farmer_phone: string;
+  buyer_id: number;
+  buyer_name: string;
+  destination_mill: string;
+  destination_district: string;
+  estimated_quantity_quintals: number;
+  
+  // Weighbridge measurements
+  gross_weight_kg: number;
+  tare_weight_kg: number;
+  net_produce_kg: number;
+  net_produce_quintals: number;
+  
+  // Quality Assay Readings at Gate
+  tested_moisture_pct: number;
+  tested_foreign_matter_pct: number;
+  tested_damaged_pct: number;
+  
+  // Financial Settlement
+  base_price_per_quintal: number;
+  refraction_deduction_amount: number;
+  net_payable_amount: number;
+  escrow_advance_deducted: number;
+  final_settlement_released: number;
+  
+  // Timestamps
+  gate_in_time?: string;
+  gross_weigh_time?: string;
+  quality_test_time?: string;
+  tare_weigh_time?: string;
+  gate_out_time?: string;
+  
+  status: GatePassStatus;
+  qr_code_token: string;
+  security_hash: string;
+  weighbridge_operator: string;
+  weighbridge_terminal_id: string;
+}
+
+// ==========================================
+// PHASE 5: PRE-HARVEST FORWARD CONTRACTS
+// ==========================================
+
+export type ForwardContractStatus = 'OPEN_FOR_BOOKING' | 'PARTIALLY_BOOKED' | 'FULLY_COMMITTED' | 'HARVEST_ACTIVE' | 'SETTLED';
+
+export interface ForwardContractOffer {
+  id: string;
+  offer_code: string; // AGC-FWD-2026-KH-09
+  buyer_id: number;
+  buyer_name: string;
+  company_name: string;
+  commodity: string;
+  variety: string;
+  season: 'KHARIF_2026' | 'RABI_2026_27';
+  target_volume_quintals: number;
+  committed_volume_quintals: number;
+  pre_harvest_contract_price: number; // ₹/Qtl
+  cacp_msp_floor_price: number; // ₹/Qtl (Statutory floor guarantee)
+  upside_sharing_percent: number; // 50%
+  sowing_advance_percent: number; // 20%
+  sowing_advance_per_quintal: number;
+  delivery_window_start: string;
+  delivery_window_end: string;
+  harvest_district: string;
+  mill_delivery_center: string;
+  quality_specs_summary: string;
+  model_form_type: 'MAHARASHTRA_CONTRACT_FARMING_ACT_FORM_C';
+  status: ForwardContractStatus;
+  participating_farmers_count: number;
+  created_at: string;
+  notes?: string;
+}
+
+export interface ForwardPricingSimulation {
+  forward_contract_price: number;
+  msp_floor_price: number;
+  simulated_harvest_spot_price: number;
+  upside_share_pct: number;
+  spot_above_contract: number;
+  spot_below_contract: number;
+  final_farmer_price_per_qtl: number;
+  effective_gain_over_msp_per_qtl: number;
+  protection_mechanism: 'CONTRACT_PRICE_GUARANTEE' | 'SPOT_UPSIDE_SHARED' | 'MSP_FLOOR_APPLIED';
+  explanation_en: string;
+  explanation_mr: string;
+}
+
 

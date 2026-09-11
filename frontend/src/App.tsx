@@ -6,6 +6,7 @@ import { BuyerDiscovery } from './components/BuyerDiscovery';
 import { RFQNegotiationPortal } from './components/RFQNegotiationPortal';
 import { EscrowContractHub } from './components/EscrowContractHub';
 import { DisputePortal } from './components/DisputePortal';
+import { BuyerDemandBoard } from './components/BuyerDemandBoard';
 import { AuthModal } from './components/AuthModal';
 import { api, type User, type ProduceLot } from './services/api';
 import { type Language } from './utils/i18n';
@@ -85,6 +86,7 @@ export const App: React.FC = () => {
   const getTabLabel = (tab: string): string => {
     switch (tab) {
       case 'intelligence': return lang === 'MR' ? 'बाजार भाव निर्देशांक' : 'Mandi Prices';
+      case 'demands': return lang === 'MR' ? 'खरेदीदार मागणी (Reverse RFQ)' : 'Buyer Procurement Demands';
       case 'farmer': return lang === 'MR' ? 'शेतकरी उत्पादन' : 'Farmer Produce';
       case 'buyer': return lang === 'MR' ? 'थोक बाजारपेठ' : 'Wholesale Marketplace';
       case 'rfq': return lang === 'MR' ? 'थेट द्विपक्षीय वाटाघाटी' : 'Bilateral RFQ Negotiation';
@@ -105,6 +107,20 @@ export const App: React.FC = () => {
       setIsAuthModalOpen(true);
       return;
     }
+
+    // Role-based access control: enforce strict tab visibility per role
+    if (currentUser) {
+      const perms = getRolePermissions(currentUser);
+      if (tab === 'farmer' && !perms.primaryTabs.includes('farmer')) {
+        setActiveTab(perms.defaultTab);
+        return;
+      }
+      if (tab === 'buyer' && !perms.primaryTabs.includes('buyer')) {
+        setActiveTab(perms.defaultTab);
+        return;
+      }
+    }
+
     setActiveTab(tab);
   };
 
@@ -340,16 +356,25 @@ export const App: React.FC = () => {
                 onListProduce={handleListLotFromMandi}
               />
             )}
-            {activeTab === 'farmer' && (
+            {activeTab === 'demands' && (
+              <BuyerDemandBoard
+                currentUser={currentUser}
+                onNavigateToContracts={handleNavigateToContracts}
+                onRequireAuth={handleRequireAuth}
+                lang={lang}
+              />
+            )}
+            {activeTab === 'farmer' && (rolePerms.primaryTabs.includes('farmer') || !currentUser) && (
               <FarmerPortal 
                 currentUser={currentUser} 
                 onNavigateToRFQs={(lot) => handleNavigateToNegotiation(lot)} 
+                onNavigateToDemands={() => handleSelectTab('demands')}
                 lang={lang}
                 onRequireAuth={handleRequireAuth}
                 initialLotPrefill={prefillLotData}
               />
             )}
-            {activeTab === 'buyer' && (
+            {activeTab === 'buyer' && (rolePerms.primaryTabs.includes('buyer') || !currentUser) && (
               <BuyerDiscovery 
                 currentUser={currentUser} 
                 onNavigateToContracts={handleNavigateToContracts} 

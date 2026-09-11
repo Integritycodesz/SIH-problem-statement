@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, ShieldCheck, Lock, 
-  Truck, DollarSign, AlertTriangle, Key, UserCheck, CheckCircle2
+  Truck, DollarSign, AlertTriangle, Key, UserCheck, CheckCircle2, Scale, QrCode
 } from 'lucide-react';
 import { api, type User, type Contract } from '../services/api';
 import { translations, type Language } from '../utils/i18n';
+import { QualityRefractionModal } from './QualityRefractionModal';
+import { DigitalGatePassModal } from './DigitalGatePassModal';
+import { TruckloadOptimizerModal } from './TruckloadOptimizerModal';
+import { INITIAL_GATE_PASSES } from '../utils/gatePass';
 
 interface EscrowContractHubProps {
   currentUser: User | null;
@@ -24,6 +28,9 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [aadhaarLastFour, setAadhaarLastFour] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [refractionModalOpen, setRefractionModalOpen] = useState<boolean>(false);
+  const [gatePassModalOpen, setGatePassModalOpen] = useState<boolean>(false);
+  const [truckloadModalOpen, setTruckloadModalOpen] = useState<boolean>(false);
   const [rolePerspective, setRolePerspective] = useState<'AUTO' | 'FARMER' | 'BUYER' | 'ADMIN'>('AUTO');
 
   useEffect(() => {
@@ -525,6 +532,55 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
               </div>
             </div>
 
+            {/* Statutory Quality Refraction Matrix Card */}
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Scale size={16} color="#0284c7" />
+                  <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>
+                    {lang === 'MR' ? 'वैधानिक गुणवत्ता अपवर्तन निकष (APMC Rule 38)' : 'Statutory Quality Refraction Schedule (APMC Rule 38)'}
+                  </strong>
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
+                  {lang === 'MR'
+                    ? `${selectedContract.commodity} आधार आर्द्रता: १०%, कचरा: १%. गेट वजन कपात व दर वजावट कायदेशीर बांधील.`
+                    : `${selectedContract.commodity}: Base Moisture 10%, Foreign Matter 1%. Binding APMC Schedule attached to mill weighbridge.`}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-gov-secondary"
+                  onClick={() => setRefractionModalOpen(true)}
+                  style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Scale size={13} color="#0284c7" />
+                  <span>{lang === 'MR' ? 'अपवर्तन पावती' : 'Refraction Slip'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-gov-secondary"
+                  onClick={() => setGatePassModalOpen(true)}
+                  style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}
+                >
+                  <QrCode size={13} color="#059669" />
+                  <span>{lang === 'MR' ? 'ई-गेट पास (QR)' : 'Digital Gate Pass (QR)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-gov-secondary"
+                  onClick={() => setTruckloadModalOpen(true)}
+                  style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}
+                >
+                  <Truck size={13} color="#2563eb" />
+                  <span>{lang === 'MR' ? 'वाहतूक बिल्टी' : 'Truck Bilty'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Legal Contract Document Box */}
             <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-card)', maxHeight: '160px', overflowY: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
@@ -549,6 +605,38 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
           </div>
         )}
       </div>
+
+      {/* Quality Refraction Weighbridge Modal */}
+      {selectedContract && (
+        <QualityRefractionModal
+          isOpen={refractionModalOpen}
+          onClose={() => setRefractionModalOpen(false)}
+          commodity={selectedContract.commodity}
+          basePricePerQuintal={selectedContract.final_price_per_quintal}
+          initialQuantityQuintals={selectedContract.quantity_quintals}
+          customSchedule={selectedContract.refraction_schedule}
+          companyName={selectedContract.buyer_name}
+          lang={lang}
+        />
+      )}
+
+      {/* Digital Gate Pass Modal (Phase 4) */}
+      <DigitalGatePassModal
+        isOpen={gatePassModalOpen}
+        onClose={() => setGatePassModalOpen(false)}
+        contractNumber={selectedContract?.contract_number}
+        gatePass={INITIAL_GATE_PASSES.find(gp => gp.commodity.toLowerCase().includes(selectedContract?.commodity.toLowerCase() || '')) || INITIAL_GATE_PASSES[0]}
+        lang={lang}
+      />
+
+      {/* Logistics Consignment Waybill Modal (Phase 3) */}
+      <TruckloadOptimizerModal
+        isOpen={truckloadModalOpen}
+        onClose={() => setTruckloadModalOpen(false)}
+        commodity={selectedContract?.commodity || 'Soybean'}
+        destinationHub={selectedContract?.delivery_address || 'Nagpur Hingna Industrial Area'}
+        lang={lang}
+      />
     </div>
   );
 };

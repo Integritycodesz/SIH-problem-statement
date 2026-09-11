@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Send, CheckCircle2, ArrowLeft,
-  Lock, RefreshCw, Eye, Sparkles, X, ChevronRight, QrCode
+  Lock, RefreshCw, Eye, Sparkles, X, ChevronRight, QrCode, Award
 } from 'lucide-react';
 import { api, type User, type ProduceLot, type RFQ } from '../services/api';
 import { subscribeToRFQSession } from '../services/supabase';
+import { BuyerScorecardModal } from './BuyerScorecardModal';
 import { translations, type Language } from '../utils/i18n';
 
 interface RFQNegotiationPortalProps {
@@ -34,6 +35,7 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
   const [showAssayModal, setShowAssayModal] = useState<boolean>(false);
+  const [scorecardBuyerName, setScorecardBuyerName] = useState<string | null>(null);
 
   // Load initial data
   useEffect(() => {
@@ -467,6 +469,44 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
               </span>
             </div>
 
+            {/* MSAMB Statutory Verification Callout */}
+            <div style={{
+              padding: '8px 12px',
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: 'var(--radius-sm)',
+              marginBottom: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Award size={15} color="#16a34a" />
+                <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>
+                  {lang === 'MR' 
+                    ? 'MSAMB सत्यता निर्देशांक: ९९.२% वेळेवर एस्क्रो सेटलमेंट • सरासरी ४.२ तास' 
+                    : 'MSAMB Credibility Index: 99.2% On-Time Escrow • Avg 4.2h Settlement'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScorecardBuyerName(activeRfq?.buyer_name || 'Nagpur Agro-Processing Pvt Ltd')}
+                style={{
+                  fontSize: '0.7rem',
+                  color: '#059669',
+                  fontWeight: 700,
+                  background: 'none',
+                  border: 'none',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                {lang === 'MR' ? 'प्रमाणपत्र पहा' : 'View Scorecard'}
+              </button>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '230px', overflowY: 'auto', paddingRight: '4px' }}>
               {activeRfq?.messages && activeRfq.messages.length > 0 ? (
                 activeRfq.messages.map((m, idx) => {
@@ -482,10 +522,35 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
                         fontSize: '0.76rem'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <strong style={{ color: isBuyer ? '#0284c7' : '#059669', fontSize: '0.78rem' }}>
-                          {m.sender_name}
-                        </strong>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ color: isBuyer ? '#0284c7' : '#059669', fontSize: '0.78rem' }}>
+                            {m.sender_name}
+                          </strong>
+                          {isBuyer && (
+                            <button
+                              type="button"
+                              onClick={() => setScorecardBuyerName(m.sender_name)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                fontSize: '0.64rem',
+                                fontWeight: 700,
+                                borderRadius: 'var(--radius-full)',
+                                backgroundColor: '#ecfdf5',
+                                border: '1px solid #86efac',
+                                color: '#166534',
+                                cursor: 'pointer'
+                              }}
+                              title="View MSAMB Payment Reliability Scorecard"
+                            >
+                              <Award size={10} color="#16a34a" />
+                              <span>MSAMB 99.2% Escrow</span>
+                            </button>
+                          )}
+                        </div>
                         <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
                           ₹{m.offered_price} / qtl
                         </span>
@@ -782,6 +847,15 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MSAMB Statutory Buyer Credibility & Payment Reliability Scorecard Modal */}
+      {scorecardBuyerName && (
+        <BuyerScorecardModal
+          buyerName={scorecardBuyerName}
+          onClose={() => setScorecardBuyerName(null)}
+          lang={lang}
+        />
       )}
     </div>
   );

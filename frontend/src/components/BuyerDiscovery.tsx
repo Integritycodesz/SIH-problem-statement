@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Clock, Award, Eye, Zap, 
-  X, ArrowRight, Users, Sparkles, Package
+  X, ArrowRight, Users, Sparkles, Package, Building2
 } from 'lucide-react';
 import { api, type User, type ProduceLot } from '../services/api';
 import type { FPOPooledBatch } from '../types';
 import { AIQualityAssayModal } from './AIQualityAssayModal';
+import { BuyerDemandBoard } from './BuyerDemandBoard';
 import { translations, type Language } from '../utils/i18n';
 
 interface BuyerDiscoveryProps {
@@ -35,8 +36,8 @@ function getCropImage(commodity: string): string {
 }
 
 export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({ 
-  currentUser: _currentUser, 
-  onNavigateToContracts: _onNavigateToContracts,
+  currentUser, 
+  onNavigateToContracts,
   onNavigateToNegotiation,
   lang = 'EN' 
 }) => {
@@ -45,8 +46,8 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
   const [selectedLot, setSelectedLot] = useState<ProduceLot | null>(null);
   const [assayModalLot, setAssayModalLot] = useState<ProduceLot | null>(null);
 
-  // Option 1 & 2: FPO Bulk Consignments & Kisan Vision AI Quality State
-  const [buyerTab, setBuyerTab] = useState<'INDIVIDUAL_LOTS' | 'FPO_POOLS'>('INDIVIDUAL_LOTS');
+  // Option 1 & 2: FPO Bulk Consignments & Kisan Vision AI Quality State & Reverse RFQ Demands
+  const [buyerTab, setBuyerTab] = useState<'INDIVIDUAL_LOTS' | 'FPO_POOLS' | 'DEMANDS'>('INDIVIDUAL_LOTS');
   const [fpoPools, setFpoPools] = useState<FPOPooledBatch[]>([]);
   const [selectedPoolForBreakdown, setSelectedPoolForBreakdown] = useState<FPOPooledBatch | null>(null);
   const [kisanVisionModalOpen, setKisanVisionModalOpen] = useState<boolean>(false);
@@ -225,9 +226,36 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
           }}
         >
           <Users size={16} />
-          <span>{lang === 'MR' ? 'FPO संस्थात्मक मोठ्या लॉट्स (FPO Bulk Pools)' : 'FPO Bulk Consignments (Institutional Pools)'}</span>
+          <span>{lang === 'MR' ? 'FPO संस्थात्मक लॉट्स' : 'FPO Bulk Consignments'}</span>
           <span style={{ fontSize: '0.7rem', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac', padding: '1px 7px', borderRadius: '10px', fontWeight: 800 }}>
-            {fpoPools.length} Bulk Consortia
+            {fpoPools.length} Bulk
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setBuyerTab('DEMANDS')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            border: 'none',
+            borderBottom: buyerTab === 'DEMANDS' ? '3px solid #0284c7' : '3px solid transparent',
+            backgroundColor: buyerTab === 'DEMANDS' ? '#f0f9ff' : 'transparent',
+            color: buyerTab === 'DEMANDS' ? '#0369a1' : '#64748b',
+            borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Building2 size={16} />
+          <span>{lang === 'MR' ? 'खरेदीदार थेट मागणी (Reverse RFQs)' : 'Live Buyer Demands (Reverse RFQs)'}</span>
+          <span style={{ fontSize: '0.7rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc', padding: '1px 7px', borderRadius: '10px', fontWeight: 800 }}>
+            Tenders
           </span>
         </button>
       </div>
@@ -669,6 +697,17 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
         })}
       </div>
     )}
+    </div>
+  )}
+
+  {/* Option 3: Institutional Buyer Demand Aggregation (Reverse RFQ / Procurement Tenders) */}
+  {buyerTab === 'DEMANDS' && (
+    <div style={{ marginTop: '6px' }}>
+      <BuyerDemandBoard
+        currentUser={currentUser}
+        onNavigateToContracts={onNavigateToContracts}
+        lang={lang}
+      />
     </div>
   )}
 

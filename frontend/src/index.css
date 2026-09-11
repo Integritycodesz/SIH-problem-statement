@@ -304,3 +304,74 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Official MSAMB Certificate Print Styles (Single-Page Exact Layout)         */
+/* -------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm 8mm 10mm;
+  }
+
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #0f172a !important;
+  }
+
+  /* When printing scorecard modal, remove background website completely from layout */
+  body.has-print-modal #root,
+  body:has(.scorecard-print-modal) #root {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .scorecard-print-modal,
+  .refraction-print-modal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  .scorecard-print-card,
+  .refraction-print-card {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: 2px solid #064e3b !important;
+    border-radius: 10px !important;
+    margin: 0 auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .print-only {
+    display: flex !important;
+  }
+}
+

@@ -610,3 +610,135 @@ SELECT setval('public.mandis_id_seq', (SELECT MAX(id) FROM public.mandis));
 -- NOTE: produce_lots, rfqs, rfq_messages, contracts, escrow_payments, disputes,
 -- and notifications are NOT seeded. All transactional data is created dynamically
 -- through the application UI by verified farmers, FPOs, and buyers.
+
+-- 4. STATUTORY BUYER USER PROFILES & MSAMB CREDIBILITY SCORECARDS
+INSERT INTO public.users (id, name, phone, email, role, district, state, kyc_verified, rating)
+VALUES
+  (101, 'Nagpur Agro-Processing Oil Mills', '+91-98220-41001', 'procurement@nagpuroilmills.com', 'BUYER', 'Nagpur', 'Maharashtra', true, 4.95),
+  (102, 'Adani Wilmar Consumer Hub', '+91-98220-41002', 'sourcing.west@adaniwilmar.in', 'BUYER', 'Pune', 'Maharashtra', true, 4.98),
+  (103, 'Haldiram Foods Procurement Desk', '+91-98220-41003', 'agri-procure@haldiram.com', 'BUYER', 'Nagpur', 'Maharashtra', true, 4.94),
+  (104, 'ITC Agri-Business Sourcing Cell', '+91-98220-41004', 'procurement.mh@itc.in', 'BUYER', 'Nashik', 'Maharashtra', true, 4.97),
+  (105, 'Sahyadri Farmers Producer Co.', '+91-98220-41005', 'exports@sahyadrifarms.com', 'BUYER', 'Nashik', 'Maharashtra', true, 4.96),
+  (106, 'Wardha Cotton & Ginning Mills', '+91-98220-41006', 'textiles@wardhagins.co.in', 'BUYER', 'Wardha', 'Maharashtra', true, 4.91)
+ON CONFLICT (phone) DO UPDATE 
+SET 
+  name = EXCLUDED.name, 
+  role = EXCLUDED.role, 
+  district = EXCLUDED.district, 
+  kyc_verified = true;
+
+SELECT setval('public.users_id_seq', GREATEST((SELECT MAX(id) FROM public.users), 200));
+
+INSERT INTO public.buyer_scorecards (
+  buyer_id, company_name, company_type, msamb_license_number, license_validity,
+  overall_reliability_score, credit_tier, escrow_on_time_rate, avg_payment_release_hours,
+  total_deals_completed, total_volume_cleared_quintals, total_escrow_disbursed_lakhs,
+  unresolved_disputes_count, dispute_resolution_rate_pct, default_rate_pct,
+  bank_nodal_partner, apmc_verified_depots, audited_year
+) VALUES
+  (
+    101, 'Nagpur Agro-Processing Oil Mills', 'OIL_MILL', 'MH-NAG-TR-2024-5120', 'March 2028 (Active / Verified)',
+    99.2, 'AAA_PLATINUM', 99.2, 4.2,
+    52, 48200.0, 245.8,
+    0, 100.0, 0.0,
+    'State Bank of India (MSAMB Dedicated Agri-Escrow Node)',
+    'Nagpur Central APMC, Kalmeshwar Depot, Hingna Processing Plant', 'FY 2025-26'
+  ),
+  (
+    102, 'Adani Wilmar Consumer Hub', 'FOOD_PROCESSOR', 'MH-PUN-TR-2024-8891', 'December 2027 (Active / Verified)',
+    99.8, 'AAA_PLATINUM', 99.8, 2.8,
+    140, 185000.0, 940.0,
+    0, 100.0, 0.0,
+    'HDFC Bank Agri Escrow Division',
+    'Pune Gultekdi Hub, Vashi Terminal, Daund Logistics Hub', 'FY 2025-26'
+  ),
+  (
+    103, 'Haldiram Foods International', 'FOOD_PROCESSOR', 'MH-NAG-TR-2023-3490', 'October 2028 (Active / Verified)',
+    98.9, 'AAA_PLATINUM', 98.9, 5.1,
+    78, 62000.0, 310.5,
+    0, 100.0, 0.0,
+    'Bank of Maharashtra (Statutory Mandi Partner)',
+    'Nagpur Food Park, Bhandara Road Depot, Wardha Hub', 'FY 2025-26'
+  ),
+  (
+    104, 'ITC Agri-Business Division', 'AGRI_CONGLOMERATE', 'MH-NSK-TR-2024-1182', 'August 2027 (Active / Verified)',
+    99.5, 'AAA_PLATINUM', 99.5, 3.4,
+    115, 128000.0, 650.0,
+    0, 100.0, 0.0,
+    'State Bank of India (e-Choupal Nodal Node)',
+    'Nashik APMC, Pimpalgaon Cold Storage Hub, Dindori Logistics Depot', 'FY 2025-26'
+  ),
+  (
+    105, 'Sahyadri Farmers Producer Co. Ltd.', 'EXPORTER', 'MH-NSK-TR-2022-7721', 'June 2029 (Active / Verified)',
+    99.1, 'AAA_PLATINUM', 99.1, 4.6,
+    95, 84000.0, 420.0,
+    0, 100.0, 0.0,
+    'ICICI Bank Nodal Escrow Branch',
+    'Mohadi Mega Food Park, Lasalgaon Rail Siding, Vashi Export Depot', 'FY 2025-26'
+  ),
+  (
+    106, 'Wardha Cotton & Ginning Consortium', 'GINNING_MILL', 'MH-WRD-TR-2024-6610', 'January 2028 (Active / Verified)',
+    97.8, 'AA_GOLD', 97.8, 6.4,
+    34, 31000.0, 155.0,
+    0, 100.0, 0.0,
+    'Punjab National Bank Agri Node',
+    'Wardha APMC Yard, Hinganghat Ginning Depot, Arvi Hub', 'FY 2025-26'
+  )
+ON CONFLICT (msamb_license_number) DO UPDATE
+SET
+  company_name = EXCLUDED.company_name,
+  overall_reliability_score = EXCLUDED.overall_reliability_score,
+  escrow_on_time_rate = EXCLUDED.escrow_on_time_rate,
+  avg_payment_release_hours = EXCLUDED.avg_payment_release_hours;
+
+-- 5. LIVE BUYER PROCUREMENT DEMANDS (Reverse RFQs / Institutional Tenders)
+INSERT INTO public.buyer_demands (
+  id, buyer_id, buyer_name, company_name, company_type, commodity, variety,
+  required_quantity_quintals, fulfilled_quantity_quintals, target_price_per_quintal,
+  quality_grade_required, max_moisture_percent, delivery_hub, delivery_deadline,
+  delivery_deadline_days, escrow_prefunded, status, notes
+) VALUES
+  (
+    1, 101, 'Procurement Officer (Oilseed Wing)', 'Nagpur Agro-Processing Oil Mills', 'OIL_MILL', 'Soybean', 'JS-335 / Grade A Yellow',
+    1000.0, 350.0, 5100.0,
+    'Grade A', 9.5, 'Nagpur Central Agro-Processing Hub, Hingna', 'By Sep 25, 2026',
+    14, true, 'PARTIALLY_FULFILLED', 'Bulk procurement for solvent extraction plant. 50% milestone escrow advance pre-funded.'
+  ),
+  (
+    2, 102, 'Chief Sourcing Manager', 'Adani Wilmar Consumer Hub', 'FOOD_PROCESSOR', 'Soybean', 'Grade A Processing Standard',
+    2500.0, 800.0, 5250.0,
+    'Grade A+', 9.0, 'Pune Daund Logistics Terminal', 'By Sep 30, 2026',
+    19, true, 'PARTIALLY_FULFILLED', 'High-oil content soybean procurement. Minimum batch size 50 Qtl. Guaranteed weighing slip settlement within 3 hours.'
+  ),
+  (
+    3, 103, 'Sourcing Head (Snacks & F&B)', 'Haldiram Foods International', 'FOOD_PROCESSOR', 'Gram', 'Chana Desi Bold Grade A',
+    800.0, 200.0, 6300.0,
+    'Grade A', 10.0, 'Nagpur Food Park Hub (Butibori)', 'By Oct 05, 2026',
+    24, true, 'PARTIALLY_FULFILLED', 'Procurement for besan and namkeen production line. Premium price for uniform grain size with <1% broken.'
+  ),
+  (
+    4, 104, 'Procurement Coordinator', 'ITC Agri-Business Division', 'AGRI_CONGLOMERATE', 'Wheat', 'Lokwan / Sharbati Premium',
+    1500.0, 0.0, 2850.0,
+    'Grade A', 10.5, 'Nashik Pimpalgaon Processing Depot', 'By Oct 12, 2026',
+    31, true, 'OPEN', 'Aashirvaad premium flour milling procurement. NABL moisture test verified farm gate pickups supported.'
+  ),
+  (
+    5, 105, 'Export Sourcing Desk', 'Sahyadri Farmers Producer Co. Ltd.', 'EXPORTER', 'Onion', 'Garwa (Late Kharif Export Red)',
+    1200.0, 450.0, 2600.0,
+    'Grade A+', 11.0, 'Mohadi Mega Food Park, Nashik', 'By Sep 28, 2026',
+    17, true, 'PARTIALLY_FULFILLED', 'Export consignments to UAE and Europe. Size 45-55mm, zero fungus, cold storage delivery protocol.'
+  ),
+  (
+    6, 106, 'Ginning Mill Manager', 'Wardha Cotton & Ginning Consortium', 'GINNING_MILL', 'Cotton', 'Long Staple 29-31mm',
+    1800.0, 600.0, 7800.0,
+    'Grade A', 8.5, 'Wardha APMC Yard Processing Unit', 'By Oct 15, 2026',
+    34, true, 'PARTIALLY_FULFILLED', 'Direct procurement for spinning mills. Trash < 3%, moisture < 8.5%. Cashless electronic escrow transfer on gin gate entry.'
+  )
+ON CONFLICT (id) DO UPDATE
+SET
+  fulfilled_quantity_quintals = EXCLUDED.fulfilled_quantity_quintals,
+  target_price_per_quintal = EXCLUDED.target_price_per_quintal,
+  status = EXCLUDED.status;
+
+SELECT setval('public.buyer_demands_id_seq', GREATEST((SELECT MAX(id) FROM public.buyer_demands), 20));
+
