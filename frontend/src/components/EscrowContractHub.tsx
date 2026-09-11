@@ -33,7 +33,6 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   const [truckloadModalOpen, setTruckloadModalOpen] = useState<boolean>(false);
   const [rolePerspective, setRolePerspective] = useState<'AUTO' | 'FARMER' | 'BUYER' | 'ADMIN'>('AUTO');
   const [contractLogistics, setContractLogistics] = useState<LogisticsBooking | null>(null);
-  const [showGatePassModal, setShowGatePassModal] = useState<boolean>(false);
 
   useEffect(() => {
     loadContracts();
@@ -42,7 +41,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   useEffect(() => {
     if (selectedContract) {
       api.getLogisticsBooking(selectedContract.id)
-        .then(booking => setContractLogistics(booking))
+        .then((booking: LogisticsBooking | null) => setContractLogistics(booking))
         .catch(() => setContractLogistics(null));
     } else {
       setContractLogistics(null);
@@ -440,7 +439,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                     type="button"
                     className="btn-gov-secondary"
                     style={{ padding: '4px 10px', fontSize: '0.72rem', borderColor: '#059669', color: '#065f46', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => setShowGatePassModal(true)}
+                    onClick={() => setGatePassModalOpen(true)}
                   >
                     <FileText size={12} /> View e-Gate Pass & QR
                   </button>

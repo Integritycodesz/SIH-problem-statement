@@ -253,6 +253,134 @@ export interface CACPMSPRecord {
 }
 
 // ==========================================
+// STORAGE & POST-HARVEST PRESERVATION
+// ==========================================
+
+export interface StorageFacility {
+  id: number;
+  name: string;
+  facility_type: 'COLD_STORAGE' | 'WDRA_GODOWN' | 'APMC_WAREHOUSE' | 'CA_STORE';
+  district: string;
+  taluka?: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+  total_capacity_mt: number;
+  available_capacity_mt: number;
+  daily_rent_per_quintal: number;
+  temperature_celsius?: number;
+  humidity_percent?: number;
+  is_wdra_accredited: boolean;
+  enwr_pledge_eligible: boolean;
+  contact_person?: string;
+  contact_phone?: string;
+  created_at?: string;
+}
+
+export interface QualityAssay {
+  id: number;
+  certificate_id: string;
+  lot_id?: number | null;
+  farmer_id?: number | null;
+  commodity: string;
+  variety?: string;
+  overall_grade: string;
+  moisture_percent: number;
+  color_uniformity_score: number;
+  defect_percentage: number;
+  purity_index: number;
+  sample_image_url?: string;
+  assayed_at: string;
+}
+
+export interface CACPMSPBenchmark {
+  id: number;
+  commodity: string;
+  variety?: string;
+  crop_year: string;
+  season: string;
+  msp_price: number;
+  cost_a2_fl?: number;
+  return_over_cost_pct?: number;
+  statutory_body?: string;
+  effective_date?: string;
+}
+
+// ==========================================
+// AI BUYER MATCHMAKING ENGINE
+// ==========================================
+
+export interface BuyerMatch {
+  buyer_id: number;
+  buyer_name: string;
+  company_name: string;
+  district: string;
+  state: string;
+  hub_name: string;
+  distance_km: number;
+  rating: number;
+  kyc_verified: boolean;
+  escrow_verified: boolean;
+  msamb_license?: string;
+  standing_bid_price: number;
+  price_difference: number; // positive = premium above asking
+  commodity_preference: string;
+  variety_preference?: string;
+  moisture_spec_max: number;
+  min_grade: string;
+  match_score: number; // 0 - 100%
+  match_reasons: string[];
+  contact_phone?: string;
+  prompt_pitch_text?: string;
+}
+
+// ==========================================
+// LOGISTICS COORDINATION & GATE PASS
+// ==========================================
+
+export type LogisticsStatus = 
+  | 'BOOKED' 
+  | 'DISPATCHED_FARMGATE' 
+  | 'WEIGHBRIDGE_SCANNED' 
+  | 'APMC_WEIGHBRIDGE_SCANNED'
+  | 'DELIVERED_UNLOADED'
+  | 'DELIVERED_ACCEPTED';
+
+export interface LogisticsBooking {
+  id: number;
+  contract_id?: number | null;
+  contract_number?: string | null;
+  lot_id?: number | null;
+  gate_pass_code: string;
+  transporter_name: string;
+  transporter_contact?: string | null;
+  vehicle_number: string;
+  vehicle_type: string;
+  driver_name: string;
+  driver_phone: string;
+  driver_license?: string | null;
+  pickup_location: string;
+  delivery_location: string;
+  distance_km: number;
+  estimated_transit_hours: number;
+  freight_charge: number;
+  gross_weight_quintals?: number | null;
+  tare_weight_quintals?: number | null;
+  net_weight_quintals: number;
+  status: LogisticsStatus;
+  dispatched_at?: string | null;
+  weighbridge_scanned_at?: string | null;
+  delivered_at?: string | null;
+  security_hash: string;
+  qr_payload_json?: string | null;
+  created_at: string;
+  farmer_name?: string | null;
+  buyer_name?: string | null;
+  commodity?: string | null;
+}
+
+
+// ==========================================
 // OPTION 1: FPO BATCH POOLING & AGGREGATION
 // ==========================================
 
@@ -325,129 +453,298 @@ export interface AIQualityAssayResult {
   image_url?: string;
 }
 
+
 // ==========================================
-// STORAGE & POST-HARVEST PRESERVATION
+// INSTITUTIONAL BUYER DEMAND & CREDIBILITY
 // ==========================================
 
-export interface StorageFacility {
-  id: number;
-  name: string;
-  facility_type: 'COLD_STORAGE' | 'WDRA_GODOWN' | 'APMC_WAREHOUSE' | 'CA_STORE';
-  district: string;
-  taluka?: string;
-  address: string;
-  lat?: number;
-  lng?: number;
-  total_capacity_mt: number;
-  available_capacity_mt: number;
-  daily_rent_per_quintal: number;
-  temperature_celsius?: number;
-  humidity_percent?: number;
-  is_wdra_accredited: boolean;
-  enwr_pledge_eligible: boolean;
-  contact_person?: string;
-  contact_phone?: string;
-  created_at?: string;
+export interface BuyerReliabilityScorecard {
+  buyer_id: number;
+  company_name: string;
+  company_type: 'OIL_MILL' | 'FOOD_PROCESSOR' | 'EXPORTER' | 'RETAIL_CHAIN' | 'GINNING_MILL' | 'AGRI_CONGLOMERATE';
+  msamb_license_number: string;
+  license_validity: string;
+  overall_reliability_score: number; // e.g. 99.2
+  credit_tier: 'AAA_PLATINUM' | 'AA_GOLD' | 'A_VERIFIED';
+  escrow_on_time_rate: number; // 99.2%
+  avg_payment_release_hours: number; // 4.2 hours
+  total_deals_completed: number;
+  total_volume_cleared_quintals: number;
+  total_escrow_disbursed_lakhs: number;
+  unresolved_disputes_count: number; // 0
+  dispute_resolution_rate_pct: number; // 100.0%
+  default_rate_pct: number; // 0.0%
+  bank_nodal_partner: string;
+  apmc_verified_depots: string[];
+  audited_year: string;
+  monthly_target_quintals?: number;
+  monthly_procured_quintals?: number;
+  target_commodity?: string;
+  apmc_benchmark_price_per_qtl?: number;
 }
 
-export interface QualityAssay {
-  id: number;
-  certificate_id: string;
-  lot_id?: number | null;
-  farmer_id?: number | null;
-  commodity: string;
-  variety?: string;
-  overall_grade: string;
-  moisture_percent: number;
-  color_uniformity_score: number;
-  defect_percentage: number;
-  purity_index: number;
-  sample_image_url?: string;
-  assayed_at: string;
+export interface CorporateProcurementKPIs {
+  target_quintals: number;
+  procured_quintals: number;
+  fulfillment_pct: number;
+  wap_achieved_per_qtl: number;
+  apmc_benchmark_per_qtl: number;
+  savings_per_qtl: number;
+  total_net_savings_lakhs: number;
+  target_commodity: string;
+  active_contracts_count: number;
+  monthly_target_quintals?: number;
+  monthly_procured_quintals?: number;
+  target_fulfillment_percent?: number;
+  weighted_average_price_inr?: number;
+  apmc_benchmark_modal_price_inr?: number;
+  direct_procurement_savings_per_qtl?: number;
+  total_cost_savings_inr?: number;
+  total_cost_savings_lakhs?: number;
+  active_tenders_count?: number;
+  refraction_deductions_saved_inr?: number;
 }
 
-export interface CACPMSPBenchmark {
+export interface BuyerDemand {
   id: number;
-  commodity: string;
-  variety?: string;
-  crop_year: string;
-  season: string;
-  msp_price: number;
-  cost_a2_fl?: number;
-  return_over_cost_pct?: number;
-  statutory_body?: string;
-  effective_date?: string;
-}
-
-// ==========================================
-// GAP 4: AI BUYER MATCHMAKING ENGINE
-// ==========================================
-
-export interface BuyerMatch {
   buyer_id: number;
   buyer_name: string;
   company_name: string;
-  district: string;
-  state: string;
-  hub_name: string;
-  distance_km: number;
-  rating: number;
-  kyc_verified: boolean;
-  escrow_verified: boolean;
-  msamb_license?: string;
-  standing_bid_price: number;
-  price_difference: number;
-  commodity_preference: string;
-  variety_preference?: string;
-  moisture_spec_max: number;
-  min_grade: string;
-  match_score: number;
-  match_reasons: string[];
-  contact_phone?: string;
-  prompt_pitch_text?: string;
+  company_type: 'OIL_MILL' | 'FOOD_PROCESSOR' | 'EXPORTER' | 'RETAIL_CHAIN' | 'GINNING_MILL' | 'AGRI_CONGLOMERATE';
+  commodity: string;
+  variety: string;
+  required_quantity_quintals: number;
+  fulfilled_quantity_quintals: number;
+  target_price_per_quintal: number;
+  quality_grade_required: string;
+  max_moisture_percent: number;
+  delivery_hub: string;
+  delivery_deadline: string;
+  delivery_deadline_days: number;
+  escrow_prefunded: boolean;
+  status: 'OPEN' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'EXPIRED';
+  credibility_scorecard: BuyerReliabilityScorecard;
+  notes?: string;
+  created_at: string;
+  refraction_schedule?: RefractionSchedule;
 }
 
 // ==========================================
-// GAP 5: LOGISTICS COORDINATION & GATE PASS
+// STATUTORY QUALITY REFRACTION & DEDUCTION MATRIX
 // ==========================================
 
-export type LogisticsStatus = 
-  | 'BOOKED' 
-  | 'DISPATCHED_FARMGATE' 
-  | 'WEIGHBRIDGE_SCANNED' 
-  | 'APMC_WEIGHBRIDGE_SCANNED'
-  | 'DELIVERED_UNLOADED'
-  | 'DELIVERED_ACCEPTED';
+export interface RefractionSchedule {
+  commodity: string;
+  base_moisture_pct: number;
+  permissible_moisture_pct: number;
+  moisture_penalty_rate_pct: number;
+  max_tolerable_moisture_pct: number;
+  permissible_foreign_matter_pct: number;
+  foreign_matter_penalty_mode: 'NET_WEIGHT_DEDUCTION' | 'PRICE_PERCENT_DEDUCTION';
+  permissible_damaged_grains_pct: number;
+  damaged_penalty_rate_pct: number;
+  statutory_rule_ref: string;
+}
 
-export interface LogisticsBooking {
-  id: number;
-  contract_id?: number | null;
-  contract_number?: string | null;
-  lot_id?: number | null;
-  gate_pass_code: string;
-  transporter_name: string;
-  transporter_contact?: string | null;
+export interface RefractionInputParams {
+  gross_weight_quintals: number;
+  base_price_per_quintal: number;
+  tested_moisture_pct: number;
+  tested_foreign_matter_pct: number;
+  tested_damaged_pct: number;
+}
+
+export interface RefractionCalculationResult {
+  schedule: RefractionSchedule;
+  params: RefractionInputParams;
+  gross_weight_quintals: number;
+  foreign_matter_excess_pct: number;
+  foreign_matter_deduction_quintals: number;
+  net_weight_quintals: number;
+  base_price_per_quintal: number;
+  moisture_excess_pct: number;
+  moisture_penalty_rate_applied_pct: number;
+  moisture_deduction_per_quintal: number;
+  damaged_excess_pct: number;
+  damaged_penalty_rate_applied_pct: number;
+  damaged_deduction_per_quintal: number;
+  total_price_deduction_per_quintal: number;
+  net_price_per_quintal: number;
+  gross_total_amount: number;
+  net_total_amount: number;
+  total_refraction_discount_amount: number;
+  effective_deduction_pct: number;
+  acceptance_status: 'FULL_ACCEPTANCE' | 'STANDARD_REFRACTION_APPLIED' | 'HIGH_REFRACTION_WARNING' | 'REJECTION_RISK';
+  status_label_en: string;
+  status_label_mr: string;
+}
+
+// ==========================================
+// PHASE 3: MULTI-LOT CONSIGNMENT & TRUCKLOAD OPTIMIZER
+// ==========================================
+
+export type CommercialTruckType = 'MINI_TRUCK' | 'MEDIUM_COMMERCIAL' | 'MULTI_AXLE_HEAVY' | 'TRAILER_RIG';
+
+export interface VehicleOption {
+  type: CommercialTruckType;
+  name_en: string;
+  name_mr: string;
+  wheels: string;
+  capacity_quintals: number;
+  capacity_tonnes: number;
+  base_rate_per_km: number;
+  min_distance_km: number;
+  diesel_efficiency_kmpl: number;
+  carrier_partner: string;
+  driver_contact?: string;
+  vehicle_badge: string;
+}
+
+export interface PooledLotItem {
+  id: string | number;
+  farmer_id: number;
+  farmer_name: string;
+  farmer_phone: string;
+  village: string;
+  district: string;
+  commodity: string;
+  variety: string;
+  quantity_quintals: number;
+  pickup_order: number;
+  pickup_status: 'QUEUED' | 'LOADED' | 'DISPATCHED';
+  freight_share_inr: number;
+  individual_freight_inr: number;
+  freight_savings_inr: number;
+}
+
+export interface ConsignmentPool {
+  id: string;
+  pool_code: string;
+  demand_id?: number;
+  destination_hub: string;
+  destination_mill: string;
+  commodity: string;
+  vehicle: VehicleOption;
+  carrier_name: string;
   vehicle_number: string;
-  vehicle_type: string;
   driver_name: string;
   driver_phone: string;
-  driver_license?: string | null;
-  pickup_location: string;
-  delivery_location: string;
-  distance_km: number;
-  estimated_transit_hours: number;
-  freight_charge: number;
-  gross_weight_quintals?: number | null;
-  tare_weight_quintals?: number | null;
-  net_weight_quintals: number;
-  status: LogisticsStatus;
-  dispatched_at?: string | null;
-  weighbridge_scanned_at?: string | null;
-  delivered_at?: string | null;
-  security_hash: string;
-  qr_payload_json?: string | null;
+  total_capacity_quintals: number;
+  loaded_quantity_quintals: number;
+  utilization_percent: number;
+  total_distance_km: number;
+  total_freight_cost_inr: number;
+  pooled_cost_per_quintal: number;
+  individual_cost_per_quintal: number;
+  total_savings_inr: number;
+  status: 'OPEN_FOR_POOLING' | 'OPTIMAL_FULL' | 'DISPATCH_READY' | 'IN_TRANSIT' | 'ARRIVED_MILL_GATE';
+  lots: PooledLotItem[];
   created_at: string;
-  farmer_name?: string | null;
-  buyer_name?: string | null;
-  commodity?: string | null;
+  dispatch_eta: string;
+  security_seal_number?: string;
 }
+
+// ==========================================
+// PHASE 4: DIGITAL GATE PASS & MILL WEIGHBRIDGE
+// ==========================================
+
+export type GatePassStatus = 
+  | 'GENERATED' 
+  | 'AT_MILL_GATE' 
+  | 'GROSS_WEIGHED' 
+  | 'QUALITY_ASSAYED' 
+  | 'TARE_WEIGHED' 
+  | 'PAYMENT_TRIGGERED' 
+  | 'COMPLETED';
+
+export interface DigitalGatePass {
+  id: string;
+  pass_number: string;
+  contract_id: number;
+  contract_number: string;
+  truck_number: string;
+  driver_name: string;
+  driver_phone: string;
+  carrier_name: string;
+  commodity: string;
+  variety: string;
+  farmer_id: number;
+  farmer_name: string;
+  farmer_phone: string;
+  buyer_id: number;
+  buyer_name: string;
+  destination_mill: string;
+  destination_district: string;
+  estimated_quantity_quintals: number;
+  gross_weight_kg: number;
+  tare_weight_kg: number;
+  net_produce_kg: number;
+  net_produce_quintals: number;
+  tested_moisture_pct: number;
+  tested_foreign_matter_pct: number;
+  tested_damaged_pct: number;
+  base_price_per_quintal: number;
+  refraction_deduction_amount: number;
+  net_payable_amount: number;
+  escrow_advance_deducted: number;
+  final_settlement_released: number;
+  gate_in_time?: string;
+  gross_weigh_time?: string;
+  quality_test_time?: string;
+  tare_weigh_time?: string;
+  gate_out_time?: string;
+  status: GatePassStatus;
+  qr_code_token: string;
+  security_hash: string;
+  weighbridge_operator: string;
+  weighbridge_terminal_id: string;
+}
+
+// ==========================================
+// PHASE 5: PRE-HARVEST FORWARD CONTRACTS
+// ==========================================
+
+export type ForwardContractStatus = 'OPEN_FOR_BOOKING' | 'PARTIALLY_BOOKED' | 'FULLY_COMMITTED' | 'HARVEST_ACTIVE' | 'SETTLED';
+
+export interface ForwardContractOffer {
+  id: string;
+  offer_code: string;
+  buyer_id: number;
+  buyer_name: string;
+  company_name: string;
+  commodity: string;
+  variety: string;
+  season: 'KHARIF_2026' | 'RABI_2026_27';
+  target_volume_quintals: number;
+  committed_volume_quintals: number;
+  pre_harvest_contract_price: number;
+  cacp_msp_floor_price: number;
+  upside_sharing_percent: number;
+  sowing_advance_percent: number;
+  sowing_advance_per_quintal: number;
+  delivery_window_start: string;
+  delivery_window_end: string;
+  harvest_district: string;
+  mill_delivery_center: string;
+  quality_specs_summary: string;
+  model_form_type: 'MAHARASHTRA_CONTRACT_FARMING_ACT_FORM_C';
+  status: ForwardContractStatus;
+  participating_farmers_count: number;
+  created_at: string;
+  notes?: string;
+}
+
+export interface ForwardPricingSimulation {
+  forward_contract_price: number;
+  msp_floor_price: number;
+  simulated_harvest_spot_price: number;
+  upside_share_pct: number;
+  spot_above_contract: number;
+  spot_below_contract: number;
+  final_farmer_price_per_qtl: number;
+  effective_gain_over_msp_per_qtl: number;
+  protection_mechanism: 'CONTRACT_PRICE_GUARANTEE' | 'SPOT_UPSIDE_SHARED' | 'MSP_FLOOR_APPLIED';
+  explanation_en: string;
+  explanation_mr: string;
+}
+

@@ -34,6 +34,12 @@ import type {
   FPOPooledBatch,
   AIQualityAssayMetric,
   AIQualityAssayResult,
+  StorageFacility,
+  QualityAssay,
+  CACPMSPBenchmark,
+  BuyerMatch,
+  LogisticsBooking,
+  LogisticsStatus,
   BuyerReliabilityScorecard,
   BuyerDemand,
   CorporateProcurementKPIs,
@@ -93,6 +99,12 @@ export type {
   FPOPooledBatch,
   AIQualityAssayMetric,
   AIQualityAssayResult,
+  StorageFacility,
+  QualityAssay,
+  CACPMSPBenchmark,
+  BuyerMatch,
+  LogisticsBooking,
+  LogisticsStatus,
   BuyerReliabilityScorecard,
   BuyerDemand,
   CorporateProcurementKPIs,
@@ -3119,9 +3131,376 @@ export const api = {
   },
 
   // ============================================================================
-  // =========================================================================
+  // GAP 4: AI BUYER MATCHMAKING & DIRECT PRODUCE PITCHING
+  // ============================================================================
+
+  async getMatchedBuyersForLot(lot: ProduceLot): Promise<BuyerMatch[]> {
+    await new Promise(r => setTimeout(r, 60));
+
+    const lotCommodity = (lot.commodity || '').toLowerCase();
+    const lotVariety = (lot.variety || '').toLowerCase();
+    const lotDistrict = lot.district || 'Nashik';
+    const lotPrice = Number(lot.base_price_per_quintal) || 2000;
+    const lotMoisture = Number(lot.moisture_percent) || 11.0;
+
+    let buyerPool = [...VERIFIED_MAHARASHTRA_BUYERS];
+
+    if (supabase) {
+      try {
+        const { data: dbBuyers } = await supabase.from('users').select('*').eq('role', 'BUYER');
+        if (dbBuyers && dbBuyers.length > 0) {
+          dbBuyers.forEach((dbb: any) => {
+            if (!buyerPool.some(b => b.buyer_id === dbb.id)) {
+              buyerPool.push({
+                buyer_id: dbb.id,
+                buyer_name: dbb.name,
+                company_name: dbb.name.includes('(') ? dbb.name : `${dbb.name} Wholesale Sourcing`,
+                district: dbb.district || 'Latur',
+                state: dbb.state || 'Maharashtra',
+                hub_name: `${dbb.district || 'APMC'} Agro Processing Terminal`,
+                distance_km: calculateMandiDistance(lotDistrict, `${dbb.district} Hub`, dbb.district),
+                rating: Number(dbb.rating) || 4.9,
+                kyc_verified: dbb.kyc_verified ?? true,
+                escrow_verified: true,
+                standing_bid_price: lotPrice + 25,
+                price_difference: 25,
+                commodity_preference: lot.commodity,
+                moisture_spec_max: 12.0,
+                min_grade: 'Grade A',
+                match_score: 95,
+                match_reasons: [
+                  `Verified corporate buyer registered in ${dbb.district}`,
+                  `Pre-funded escrow standing purchase mandate`,
+                  `NABL assay compliant batch accepted`
+                ],
+                contact_phone: dbb.phone || '+91 98220 12345'
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('[AI Matchmaker] Supabase buyers fetch notice:', e);
+      }
+    }
+
+    const scoredMatches = buyerPool.map(buyer => {
+      let score = 0;
+      const reasons: string[] = [];
+
+      // 1. Commodity & Variety Compatibility (Max 35 pts)
+      const buyerCrop = buyer.commodity_preference.toLowerCase();
+      const buyerVariety = (buyer.variety_preference || '').toLowerCase();
+
+      if (lotCommodity.includes(buyerCrop) || buyerCrop.includes(lotCommodity)) {
+        score += 35;
+        if (lotVariety && buyerVariety && (lotVariety.includes(buyerVariety) || buyerVariety.includes(lotVariety))) {
+          score += 5;
+          reasons.push(`Exact variety match: ${lot.variety}`);
+        } else {
+          reasons.push(`Commodity spec match: ${lot.commodity}`);
+        }
+      } else {
+        score += 8;
+        reasons.push(`Secondary interest in ${lot.commodity} diversification`);
+      }
+
+      // 2. Geographic Distance via Haversine calculation (Max 25 pts)
+      const distKm = calculateMandiDistance(lotDistrict, buyer.hub_name, buyer.district);
+      if (distKm <= 35) {
+        score += 25;
+        reasons.push(`${distKm} km short-haul transit corridor`);
+      } else if (distKm <= 60) {
+        score += 20;
+        reasons.push(`${distKm} km regional processing hub`);
+      } else if (distKm <= 120) {
+        score += 15;
+        reasons.push(`${distKm} km line haul corridor`);
+      } else {
+        score += 10;
+        reasons.push(`${distKm} km interstate logistics route`);
+      }
+
+      // 3. Moisture & Quality Assay Specification (Max 20 pts)
+      if (lotMoisture <= buyer.moisture_spec_max) {
+        score += 20;
+        reasons.push(`Moisture spec match: ${lotMoisture}% compliant (≤ ${buyer.moisture_spec_max}%)`);
+      } else if (lotMoisture <= buyer.moisture_spec_max + 1.0) {
+        score += 14;
+        reasons.push(`Moisture within 1.0% tolerance threshold`);
+      } else {
+        score += 6;
+      }
+
+      // 4. Price Willingness & Standing Bid (Max 20 pts)
+      let buyerBid = buyer.standing_bid_price;
+      if (!lotCommodity.includes(buyerCrop)) {
+        buyerBid = Math.round(lotPrice * 1.01);
+      }
+      const priceDiff = buyerBid - lotPrice;
+
+      if (buyerBid >= lotPrice) {
+        score += 20;
+        reasons.push(`Standing bid ₹${buyerBid.toLocaleString()}/qtl (+₹${priceDiff} above asking)`);
+      } else if (buyerBid >= lotPrice * 0.95) {
+        score += 15;
+        reasons.push(`Standing bid ₹${buyerBid.toLocaleString()}/qtl (within 5% range)`);
+      } else {
+        score += 8;
+      }
+
+      if (buyer.escrow_verified) {
+        reasons.push('Pre-funded RBI-regulated nodal escrow');
+      }
+
+      const finalScore = Math.min(99, Math.max(72, Math.round(score)));
+
+      return {
+        ...buyer,
+        distance_km: distKm,
+        standing_bid_price: buyerBid,
+        price_difference: priceDiff,
+        match_score: finalScore,
+        match_reasons: reasons.slice(0, 4)
+      };
+    });
+
+    return scoredMatches.sort((a, b) => b.match_score - a.match_score);
+  },
+
+  async sendDirectLotPitch(
+    lotId: number, 
+    buyerId: number, 
+    pitchedPrice: number, 
+    customMessage?: string
+  ): Promise<{ rfq: RFQ; notifId: string }> {
+    const lot = (await this.getLots()).find(l => l.id === lotId) || DEFAULT_VERIFIED_PRODUCE_LOTS[0];
+    const buyer = VERIFIED_MAHARASHTRA_BUYERS.find(b => b.buyer_id === buyerId) || {
+      buyer_id: buyerId,
+      buyer_name: 'Corporate Buyer Desk',
+      district: 'Latur',
+      hub_name: 'APMC Terminal'
+    };
+
+    const firstMsg = customMessage || 
+      `Direct Pitch for Harvest Lot #${lot.id} (${lot.commodity} - ${lot.quantity_quintals} Qtl @ ₹${pitchedPrice}/qtl). Quality Assayed: ${lot.quality_grade}, ${lot.moisture_percent}% moisture. Immediate dispatch ready.`;
+
+    const rfq = await this.createRFQ({
+      lot_id: lot.id,
+      buyer_id: buyer.buyer_id,
+      buyer_name: (buyer as any).company_name || buyer.buyer_name,
+      farmer_id: lot.farmer_id,
+      farmer_name: lot.farmer_name,
+      commodity: lot.commodity,
+      quantity_quintals: lot.quantity_quintals,
+      initial_offer_price: pitchedPrice,
+      delivery_timeline_days: lot.expected_delivery_days || 3,
+      delivery_address: (buyer as any).hub_name || 'APMC Delivery Terminal Gate',
+      first_message: firstMsg
+    });
+
+    const notifId = 'notif-' + Date.now();
+    await this.addNotification({
+      id: notifId,
+      title: 'Direct Lot Pitch Dispatched',
+      message: `Pitch for Lot #${lot.id} sent to ${rfq.buyer_name} at ₹${pitchedPrice}/qtl. 24h bilateral window active.`,
+      timestamp: 'Just now',
+      type: 'RFQ',
+      read: false,
+      linkTab: 'rfq'
+    });
+
+    return { rfq, notifId };
+  },
+
+  // ============================================================================
   // GAP 5: END-TO-END LOGISTICS COORDINATION & APMC TRANSIT GATE PASS
-  // =========================================================================
+  // ============================================================================
+
+  async createLogisticsBooking(data: Partial<LogisticsBooking>): Promise<LogisticsBooking> {
+    const gatePassCode = data.gate_pass_code || `MH-APMC-GP-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const distanceKm = Number(data.distance_km) || 48.0;
+    const estHours = Math.round((distanceKm / 42.0 + 1.2) * 10) / 10;
+    const netWeight = Number(data.net_weight_quintals) || 100.0;
+    const freightCharge = data.freight_charge || Math.round(distanceKm * 3.85 * (netWeight / 10.0) + 650);
+
+    const securityHash = `SHA256:${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
+
+    const qrPayload = JSON.stringify({
+      gate_pass_no: gatePassCode,
+      contract_no: data.contract_number || 'AGC-MH-2026-DIRECT',
+      lot_id: data.lot_id || null,
+      commodity: data.commodity || 'Agricultural Produce',
+      net_weight_qtl: netWeight,
+      vehicle_no: data.vehicle_number || 'MH-12-RN-8821',
+      vehicle_type: data.vehicle_type || '10-Ton Eicher Pro',
+      driver_name: data.driver_name || 'Tukaram Gaikwad',
+      driver_phone: data.driver_phone || '+91 98224 88210',
+      farmer_name: data.farmer_name || 'Ramesh B. Patil',
+      buyer_name: data.buyer_name || 'Institutional Buyer',
+      pickup: data.pickup_location || 'Farmgate APMC Hub',
+      delivery: data.delivery_location || 'Buyer Processing Silo',
+      issue_timestamp: new Date().toISOString(),
+      security_hash: securityHash
+    });
+
+    const bookingPayload = {
+      contract_id: data.contract_id || null,
+      contract_number: data.contract_number || 'AGC-MH-20260911-8821',
+      lot_id: data.lot_id || null,
+      gate_pass_code: gatePassCode,
+      transporter_name: data.transporter_name || 'Mahatruck Krishi Logistics Federation',
+      transporter_contact: data.transporter_contact || '+91 98220 99881',
+      vehicle_number: (data.vehicle_number || 'MH-12-RN-8821').toUpperCase(),
+      vehicle_type: data.vehicle_type || '10-Ton Eicher Pro (120 Qtl Capacity)',
+      driver_name: data.driver_name || 'Tukaram Gaikwad',
+      driver_phone: data.driver_phone || '+91 98224 88210',
+      driver_license: data.driver_license || 'MH-14-2015008912',
+      pickup_location: data.pickup_location || 'Latur APMC Yard / Farmgate Hub',
+      delivery_location: data.delivery_location || 'ADM Agro MIDC Processing Silo, Latur',
+      distance_km: distanceKm,
+      estimated_transit_hours: estHours,
+      freight_charge: freightCharge,
+      gross_weight_quintals: data.gross_weight_quintals || Math.round((netWeight + 45.0) * 10) / 10,
+      tare_weight_quintals: data.tare_weight_quintals || 45.0,
+      net_weight_quintals: netWeight,
+      status: 'BOOKED' as LogisticsStatus,
+      security_hash: securityHash,
+      qr_payload_json: qrPayload,
+      farmer_name: data.farmer_name || 'Ramesh B. Patil',
+      buyer_name: data.buyer_name || 'ADM Agro Industries',
+      commodity: data.commodity || 'Soybean',
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        const { data: created, error } = await supabase
+          .from('logistics_bookings')
+          .insert([bookingPayload])
+          .select()
+          .single();
+
+        if (!error && created) {
+          await this.addNotification({
+            id: 'notif-' + Date.now(),
+            title: 'APMC Transit Gate Pass Generated',
+            message: `Gate Pass #${gatePassCode} issued for Vehicle ${bookingPayload.vehicle_number}. Freight ₹${freightCharge.toLocaleString()} locked.`,
+            timestamp: 'Just now',
+            type: 'ESCROW',
+            read: false,
+            linkTab: 'farmer'
+          });
+          return created as LogisticsBooking;
+        }
+      } catch (err) {
+        console.warn('[Logistics API] Supabase booking notice:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_logistics_bookings';
+    let bookings: LogisticsBooking[] = [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) bookings = JSON.parse(saved);
+    } catch {}
+
+    const newBooking: LogisticsBooking = {
+      id: 500 + Math.floor(Math.random() * 500),
+      ...bookingPayload
+    };
+
+    bookings.unshift(newBooking);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings)); } catch {}
+
+    await this.addNotification({
+      id: 'notif-' + Date.now(),
+      title: 'APMC Transit Gate Pass Generated',
+      message: `Gate Pass #${gatePassCode} issued for Vehicle ${bookingPayload.vehicle_number}. Freight ₹${freightCharge.toLocaleString()} locked.`,
+      timestamp: 'Just now',
+      type: 'ESCROW',
+      read: false,
+      linkTab: 'farmer'
+    });
+
+    return newBooking;
+  },
+
+  async getLogisticsBooking(contractId?: number, lotId?: number): Promise<LogisticsBooking | null> {
+    if (supabase) {
+      try {
+        let query = supabase.from('logistics_bookings').select('*').order('created_at', { ascending: false });
+        if (contractId) query = query.eq('contract_id', contractId);
+        else if (lotId) query = query.eq('lot_id', lotId);
+        
+        const { data, error } = await query.limit(1).maybeSingle();
+        if (!error && data) return data as LogisticsBooking;
+      } catch (err) {
+        console.warn('[Logistics API] Supabase query notice:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_logistics_bookings';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const bookings: LogisticsBooking[] = JSON.parse(saved);
+        if (contractId) return bookings.find(b => b.contract_id === contractId) || bookings[0] || null;
+        if (lotId) return bookings.find(b => b.lot_id === lotId) || bookings[0] || null;
+        return bookings[0] || null;
+      }
+    } catch {}
+
+    return {
+      id: 101,
+      contract_id: contractId || 301,
+      contract_number: 'AGC-MH-20260911-8821',
+      lot_id: lotId || 101,
+      gate_pass_code: 'MH-APMC-GP-2026-88219',
+      transporter_name: 'Mahatruck Krishi Logistics Federation',
+      transporter_contact: '+91 98220 99881',
+      vehicle_number: 'MH-12-RN-8821',
+      vehicle_type: '10-Ton Eicher Pro (120 Qtl Capacity)',
+      driver_name: 'Tukaram Gaikwad',
+      driver_phone: '+91 98224 88210',
+      driver_license: 'MH-14-2015008912',
+      pickup_location: 'Latur APMC Yard / Farmgate Hub',
+      delivery_location: 'ADM Agro MIDC Processing Silo, Latur',
+      distance_km: 48.0,
+      estimated_transit_hours: 2.3,
+      freight_charge: 2880,
+      gross_weight_quintals: 165.0,
+      tare_weight_quintals: 45.0,
+      net_weight_quintals: 120.0,
+      status: 'DISPATCHED_FARMGATE' as LogisticsStatus,
+      dispatched_at: new Date(Date.now() - 3600000).toISOString(),
+      security_hash: 'SHA256:a9f82bc194d801efc2',
+      created_at: new Date(Date.now() - 7200000).toISOString(),
+      farmer_name: 'Ramesh B. Patil',
+      buyer_name: 'ADM Agro Industries',
+      commodity: 'Soybean'
+    };
+  },
+
+  async getAllLogisticsBookings(): Promise<LogisticsBooking[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('logistics_bookings').select('*').order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) return data as LogisticsBooking[];
+      } catch {}
+    }
+
+    const STORAGE_KEY = 'agroconnect_logistics_bookings';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const bookings = JSON.parse(saved);
+        if (bookings.length > 0) return bookings;
+      }
+    } catch {}
+
+    const defaultBooking = await this.getLogisticsBooking();
+    return defaultBooking ? [defaultBooking] : [];
+  },
 
   async updateLogisticsStatus(
     bookingId: number,
@@ -3133,14 +3512,14 @@ export const api = {
 
     if (status === 'DISPATCHED_FARMGATE') {
       updates.dispatched_at = timestamp;
-    } else if (status === 'WEIGHBRIDGE_SCANNED') {
+    } else if (status === 'WEIGHBRIDGE_SCANNED' || status === 'APMC_WEIGHBRIDGE_SCANNED') {
       updates.weighbridge_scanned_at = timestamp;
       if (extra?.gross_weight_quintals) updates.gross_weight_quintals = extra.gross_weight_quintals;
       if (extra?.tare_weight_quintals) updates.tare_weight_quintals = extra.tare_weight_quintals;
       if (extra?.gross_weight_quintals && extra?.tare_weight_quintals) {
         updates.net_weight_quintals = Math.round((extra.gross_weight_quintals - extra.tare_weight_quintals) * 10) / 10;
       }
-    } else if (status === 'DELIVERED_UNLOADED') {
+    } else if (status === 'DELIVERED_UNLOADED' || status === 'DELIVERED_ACCEPTED') {
       updates.delivered_at = timestamp;
     }
 
@@ -3161,9 +3540,9 @@ export const api = {
           if (updatedRecord.contract_id) {
             if (status === 'DISPATCHED_FARMGATE') {
               await supabase.from('contracts').update({ status: 'IN_TRANSIT' }).eq('id', updatedRecord.contract_id);
-            } else if (status === 'WEIGHBRIDGE_SCANNED') {
+            } else if (status === 'WEIGHBRIDGE_SCANNED' || status === 'APMC_WEIGHBRIDGE_SCANNED') {
               await supabase.from('contracts').update({ status: 'DELIVERED_PENDING_INSPECTION' }).eq('id', updatedRecord.contract_id);
-            } else if (status === 'DELIVERED_UNLOADED') {
+            } else if (status === 'DELIVERED_UNLOADED' || status === 'DELIVERED_ACCEPTED') {
               await supabase.from('contracts').update({ status: 'COMPLETED' }).eq('id', updatedRecord.contract_id);
             }
           }
@@ -3175,7 +3554,7 @@ export const api = {
 
     const STORAGE_KEY = 'agroconnect_logistics_bookings';
     let bookings = await this.getAllLogisticsBookings();
-    bookings = bookings.map(b => {
+    bookings = bookings.map((b: LogisticsBooking) => {
       if (b.id === bookingId) {
         const merged = { ...b, ...updates };
         if (!updatedRecord) updatedRecord = merged;
@@ -3197,7 +3576,7 @@ export const api = {
     await this.addNotification({
       id: 'notif-' + Date.now(),
       title: 'Transit Milestone Advanced',
-      message: `Gate Pass #${updatedRecord?.gate_pass_code || bookingId}: ${statusLabels[status]}.`,
+      message: `Gate Pass #${updatedRecord?.gate_pass_code || bookingId}: ${statusLabels[status] || status}.`,
       timestamp: 'Just now',
       type: 'ESCROW',
       read: false,
@@ -3205,6 +3584,903 @@ export const api = {
     });
 
     return updatedRecord || bookings[0];
+  },
+
+  // ============================================================================
+  // INSTITUTIONAL BUYER DEMAND AGGREGATION & MSAMB CREDIBILITY INDEX
+  // ============================================================================
+
+  BUYER_CREDIBILITY_SCORECARDS: {
+    3: {
+      buyer_id: 3,
+      company_name: 'Nagpur Oil & Solvent Mills Pvt. Ltd.',
+      company_type: 'OIL_MILL',
+      msamb_license_number: 'MH-NAG-TR-2024-5120',
+      license_validity: 'Dec 2027 (Active / Verified MSAMB)',
+      overall_reliability_score: 99.2,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 99.2,
+      avg_payment_release_hours: 4.2,
+      total_deals_completed: 64,
+      total_volume_cleared_quintals: 58200,
+      total_escrow_disbursed_lakhs: 284.5,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'State Bank of India (MSAMB Dedicated Agri-Escrow Node)',
+      apmc_verified_depots: ['Nagpur APMC Hub', 'Amravati Terminal', 'Hingna MIDC Depot'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 5000,
+      monthly_procured_quintals: 3450,
+      target_commodity: 'Soybean',
+      apmc_benchmark_price_per_qtl: 5220
+    },
+    4: {
+      buyer_id: 4,
+      company_name: 'Adani Wilmar Agro-Processing Ltd',
+      company_type: 'OIL_MILL',
+      msamb_license_number: 'MH-AKL-CORP-2023-9082',
+      license_validity: 'Oct 2028 (Active / Verified MSAMB)',
+      overall_reliability_score: 99.5,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 99.7,
+      avg_payment_release_hours: 3.8,
+      total_deals_completed: 112,
+      total_volume_cleared_quintals: 125000,
+      total_escrow_disbursed_lakhs: 640.0,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'Bank of Baroda (National Nodal Escrow Node)',
+      apmc_verified_depots: ['Akola MIDC Hub', 'Latur APMC Depot', 'Khamgaon Terminal'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 8000,
+      monthly_procured_quintals: 5600,
+      target_commodity: 'Soybean',
+      apmc_benchmark_price_per_qtl: 5220
+    },
+    5: {
+      buyer_id: 5,
+      company_name: 'Haldiram Foods International Ltd',
+      company_type: 'FOOD_PROCESSOR',
+      msamb_license_number: 'MH-NAG-FOOD-2022-7714',
+      license_validity: 'March 2027 (Active / Verified MSAMB)',
+      overall_reliability_score: 98.6,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 98.9,
+      avg_payment_release_hours: 5.1,
+      total_deals_completed: 78,
+      total_volume_cleared_quintals: 34000,
+      total_escrow_disbursed_lakhs: 190.4,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'HDFC Bank (Agri Corporate Node)',
+      apmc_verified_depots: ['Kalamna Industrial Area, Nagpur', 'Nagpur APMC Hub'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 3000,
+      monthly_procured_quintals: 2100,
+      target_commodity: 'Gram',
+      apmc_benchmark_price_per_qtl: 5750
+    },
+    2: {
+      buyer_id: 2,
+      company_name: 'ITC Agri-Business Division (Aashirvaad)',
+      company_type: 'AGRI_CONGLOMERATE',
+      msamb_license_number: 'MH-PUN-CORP-2021-3310',
+      license_validity: 'Aug 2029 (Active / Verified MSAMB)',
+      overall_reliability_score: 99.8,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 99.9,
+      avg_payment_release_hours: 2.9,
+      total_deals_completed: 180,
+      total_volume_cleared_quintals: 210000,
+      total_escrow_disbursed_lakhs: 1150.0,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'State Bank of India (Central Escrow Node)',
+      apmc_verified_depots: ['Narayangaon Hub, Pune', 'Patan Terminal', 'Vashi Hub'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 10000,
+      monthly_procured_quintals: 7200,
+      target_commodity: 'Wheat',
+      apmc_benchmark_price_per_qtl: 2750
+    },
+    6: {
+      buyer_id: 6,
+      company_name: 'Sahyadri Agro-Processing & Exports (Nashik)',
+      company_type: 'EXPORTER',
+      msamb_license_number: 'MH-NAS-EXP-2020-1102',
+      license_validity: 'June 2028 (Active / Verified MSAMB)',
+      overall_reliability_score: 99.4,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 99.4,
+      avg_payment_release_hours: 3.5,
+      total_deals_completed: 92,
+      total_volume_cleared_quintals: 62000,
+      total_escrow_disbursed_lakhs: 340.0,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'ICICI Bank (Export Agri Escrow Desk)',
+      apmc_verified_depots: ['Dindori Agro Park, Nashik', 'Lasalgaon APMC Sub-Yard'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 4000,
+      monthly_procured_quintals: 2850,
+      target_commodity: 'Onion',
+      apmc_benchmark_price_per_qtl: 2800
+    }
+  } as Record<number, BuyerReliabilityScorecard>,
+
+  DEFAULT_BUYER_DEMANDS: [
+    {
+      id: 1,
+      buyer_id: 3,
+      buyer_name: 'Prakash Rao (Chief Commercial Officer)',
+      company_name: 'Nagpur Oil & Solvent Mills Pvt. Ltd.',
+      company_type: 'OIL_MILL',
+      commodity: 'Soybean',
+      variety: 'Yellow JS-335 (High Oil Content)',
+      required_quantity_quintals: 1200,
+      fulfilled_quantity_quintals: 450,
+      target_price_per_quintal: 5080,
+      quality_grade_required: 'Grade A',
+      max_moisture_percent: 10.0,
+      delivery_hub: 'Nagpur APMC Central Milling Hub',
+      delivery_deadline: 'Sep 25, 2026',
+      delivery_deadline_days: 14,
+      escrow_prefunded: true,
+      status: 'PARTIALLY_FULFILLED',
+      notes: 'Direct crushing line delivery. 100% advance secured in SBI Nodal Escrow Node. Gate weighment within 90 minutes.',
+      created_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    },
+    {
+      id: 2,
+      buyer_id: 4,
+      buyer_name: 'Rajendra Joshi (Central Sourcing Head)',
+      company_name: 'Adani Wilmar Agro-Processing Ltd',
+      company_type: 'OIL_MILL',
+      commodity: 'Soybean',
+      variety: 'Malwa Yellow FAQ Seed Lot',
+      required_quantity_quintals: 2500,
+      fulfilled_quantity_quintals: 800,
+      target_price_per_quintal: 5150,
+      quality_grade_required: 'Grade A+',
+      max_moisture_percent: 9.0,
+      delivery_hub: 'Akola Processing Cluster Hub',
+      delivery_deadline: 'Sep 28, 2026',
+      delivery_deadline_days: 17,
+      escrow_prefunded: true,
+      status: 'PARTIALLY_FULFILLED',
+      notes: 'Export solvent meal requirement. Minimum protein assay 38% required. Instant NABL assay at hub gate.',
+      created_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    },
+    {
+      id: 3,
+      buyer_id: 5,
+      buyer_name: 'Sunil Agrawal (Raw Material Sourcing)',
+      company_name: 'Haldiram Foods International Ltd',
+      company_type: 'FOOD_PROCESSOR',
+      commodity: 'Gram',
+      variety: 'FAQ Bold Desi Chana',
+      required_quantity_quintals: 400,
+      fulfilled_quantity_quintals: 120,
+      target_price_per_quintal: 5600,
+      quality_grade_required: 'Grade A',
+      max_moisture_percent: 10.0,
+      delivery_hub: 'Kalamna Industrial Area, Nagpur',
+      delivery_deadline: 'Oct 02, 2026',
+      delivery_deadline_days: 21,
+      escrow_prefunded: true,
+      status: 'PARTIALLY_FULFILLED',
+      notes: 'Procurement for premium Besan and Namkeen roasting line. Zero weevil infestation and uniform kernel size required.',
+      created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    },
+    {
+      id: 4,
+      buyer_id: 2,
+      buyer_name: 'Amit Sharma (Procurement Manager)',
+      company_name: 'ITC Agri-Business Division (Aashirvaad)',
+      company_type: 'AGRI_CONGLOMERATE',
+      commodity: 'Wheat',
+      variety: 'Sharbati / Lokwan (Heavy Amber Grain)',
+      required_quantity_quintals: 800,
+      fulfilled_quantity_quintals: 250,
+      target_price_per_quintal: 2600,
+      quality_grade_required: 'Grade A+',
+      max_moisture_percent: 11.0,
+      delivery_hub: 'Narayangaon Hub, Pune District',
+      delivery_deadline: 'Sep 30, 2026',
+      delivery_deadline_days: 19,
+      escrow_prefunded: true,
+      status: 'PARTIALLY_FULFILLED',
+      notes: 'Aashirvaad chakki atta milling lot. High gluten and amber luster specified. Certified electronic weighbridge receipt.',
+      created_at: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    },
+    {
+      id: 5,
+      buyer_id: 6,
+      buyer_name: 'Vilas Shinde (Managing Director)',
+      company_name: 'Sahyadri Agro-Processing & Exports (Nashik)',
+      company_type: 'EXPORTER',
+      commodity: 'Onion',
+      variety: 'Garwa Grade A (55mm+ Export Size)',
+      required_quantity_quintals: 1500,
+      fulfilled_quantity_quintals: 650,
+      target_price_per_quintal: 2650,
+      quality_grade_required: 'Grade A (Export)',
+      max_moisture_percent: 11.5,
+      delivery_hub: 'Dindori Agro Park Corridor, Nashik',
+      delivery_deadline: 'Sep 24, 2026',
+      delivery_deadline_days: 13,
+      escrow_prefunded: true,
+      status: 'PARTIALLY_FULFILLED',
+      notes: 'Direct export container packing. CA cold storage docking available. Instant MSAMB e-settlement.',
+      created_at: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    },
+    {
+      id: 6,
+      buyer_id: 3,
+      buyer_name: 'Prakash Rao',
+      company_name: 'Nagpur Oil & Solvent Mills Pvt. Ltd.',
+      company_type: 'OIL_MILL',
+      commodity: 'Cotton',
+      variety: 'Medium Staple LRA-5166 (28mm)',
+      required_quantity_quintals: 600,
+      fulfilled_quantity_quintals: 0,
+      target_price_per_quintal: 7400,
+      quality_grade_required: 'Grade A',
+      max_moisture_percent: 8.5,
+      delivery_hub: 'Hingna MIDC Ginning Terminal, Nagpur',
+      delivery_deadline: 'Oct 05, 2026',
+      delivery_deadline_days: 24,
+      escrow_prefunded: true,
+      status: 'OPEN',
+      notes: 'Ginning & oil crushing lot. Strict trash deduction per statutory MSAMB schedule.',
+      created_at: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+      credibility_scorecard: null as any
+    }
+  ] as BuyerDemand[],
+
+  async getBuyerScorecard(buyerIdOrName: number | string): Promise<BuyerReliabilityScorecard> {
+    if (supabase) {
+      try {
+        let query = supabase.from('buyer_scorecards').select('*');
+        if (typeof buyerIdOrName === 'number') {
+          query = query.eq('buyer_id', buyerIdOrName);
+        } else {
+          const parsed = parseInt(buyerIdOrName, 10);
+          if (!isNaN(parsed)) {
+            query = query.or(`buyer_id.eq.${parsed},company_name.ilike.%${buyerIdOrName}%,msamb_license_number.ilike.%${buyerIdOrName}%`);
+          } else {
+            query = query.or(`company_name.ilike.%${buyerIdOrName}%,msamb_license_number.ilike.%${buyerIdOrName}%`);
+          }
+        }
+        const { data, error } = await query.maybeSingle();
+        if (!error && data) {
+          return {
+            ...data,
+            monthly_target_quintals: Number(data.monthly_target_quintals) || 5000,
+            monthly_procured_quintals: Number(data.monthly_procured_quintals) || 3450,
+            target_commodity: data.target_commodity || 'Soybean',
+            apmc_benchmark_price_per_qtl: Number(data.apmc_benchmark_price_per_qtl) || 5220,
+            apmc_verified_depots: Array.isArray(data.apmc_verified_depots)
+              ? data.apmc_verified_depots
+              : typeof data.apmc_verified_depots === 'string'
+              ? data.apmc_verified_depots.split(',').map((s: string) => s.trim())
+              : ['Pune', 'Nashik', 'Nagpur']
+          } as BuyerReliabilityScorecard;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to fetch buyer scorecard from database:', err);
+      }
+    }
+
+    if (typeof buyerIdOrName === 'string') {
+      const parsed = parseInt(buyerIdOrName, 10);
+      if (!isNaN(parsed) && (this as any).BUYER_CREDIBILITY_SCORECARDS[parsed]) {
+        return (this as any).BUYER_CREDIBILITY_SCORECARDS[parsed];
+      }
+      const allCards = Object.values((this as any).BUYER_CREDIBILITY_SCORECARDS) as BuyerReliabilityScorecard[];
+      const match = allCards.find(
+        c => c.company_name.toLowerCase().includes(buyerIdOrName.toLowerCase())
+      );
+      if (match) return match;
+      return (this as any).BUYER_CREDIBILITY_SCORECARDS[3] || allCards[0];
+    }
+    const card = (this as any).BUYER_CREDIBILITY_SCORECARDS[buyerIdOrName];
+    if (card) return card;
+    return {
+      buyer_id: typeof buyerIdOrName === 'number' ? buyerIdOrName : 3,
+      company_name: 'MSAMB Licensed Institutional Buyer',
+      company_type: 'AGRI_CONGLOMERATE',
+      msamb_license_number: `MH-MSAMB-TR-2024-${8000 + ((typeof buyerIdOrName === 'number' ? buyerIdOrName : 3) % 1000)}`,
+      license_validity: 'March 2028 (Active / Verified MSAMB)',
+      overall_reliability_score: 98.8,
+      credit_tier: 'AAA_PLATINUM',
+      escrow_on_time_rate: 99.1,
+      avg_payment_release_hours: 4.2,
+      total_deals_completed: 45,
+      total_volume_cleared_quintals: 38000,
+      total_escrow_disbursed_lakhs: 180.0,
+      unresolved_disputes_count: 0,
+      dispute_resolution_rate_pct: 100.0,
+      default_rate_pct: 0.0,
+      bank_nodal_partner: 'State Bank of India (MSAMB Dedicated Agri-Escrow Node)',
+      apmc_verified_depots: ['Vashi APMC', 'Pune Gultekdi Hub', 'Nashik Central Depot'],
+      audited_year: 'FY 2025-26',
+      monthly_target_quintals: 5000,
+      monthly_procured_quintals: 3450,
+      target_commodity: 'Soybean',
+      apmc_benchmark_price_per_qtl: 5220
+    };
+  },
+
+  async updateBuyerProcurementTarget(
+    buyerIdOrName: number | string,
+    targetQuintals: number,
+    commodity: string = 'Soybean',
+    benchmarkPrice: number = 5220
+  ): Promise<BuyerReliabilityScorecard> {
+    const sc = await this.getBuyerScorecard(buyerIdOrName);
+    sc.monthly_target_quintals = targetQuintals;
+    sc.target_commodity = commodity;
+    sc.apmc_benchmark_price_per_qtl = benchmarkPrice;
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('buyer_scorecards')
+          .update({
+            monthly_target_quintals: targetQuintals,
+            target_commodity: commodity,
+            apmc_benchmark_price_per_qtl: benchmarkPrice
+          })
+          .eq('buyer_id', sc.buyer_id);
+      } catch (err) {
+        console.warn('[Supabase API] Could not persist updated target in database:', err);
+      }
+    }
+
+    if ((this as any).BUYER_CREDIBILITY_SCORECARDS[sc.buyer_id]) {
+      (this as any).BUYER_CREDIBILITY_SCORECARDS[sc.buyer_id] = { ...sc };
+    }
+    return sc;
+  },
+
+  async getCorporateProcurementKPIs(buyerIdOrName: number | string): Promise<CorporateProcurementKPIs> {
+    const scorecard = await this.getBuyerScorecard(buyerIdOrName);
+    const demands = await this.getBuyerDemands();
+    
+    const buyerDemands = demands.filter(d => 
+      d.buyer_id === scorecard.buyer_id || 
+      (scorecard.company_name && d.company_name.toLowerCase().includes(scorecard.company_name.toLowerCase()))
+    );
+
+    const activeTargetQuintals = scorecard.monthly_target_quintals || 5000;
+    const fulfilledQuintals = buyerDemands.reduce((sum, d) => sum + (Number(d.fulfilled_quantity_quintals) || 0), 0) + (scorecard.monthly_procured_quintals || 3450);
+    const progressPercent = Math.min(100, Math.round((fulfilledQuintals / activeTargetQuintals) * 100));
+
+    const apmcBenchmark = scorecard.apmc_benchmark_price_per_qtl || 5220;
+    const totalWeightedSpend = buyerDemands.reduce((sum, d) => sum + ((Number(d.target_price_per_quintal) || 5080) * (Number(d.fulfilled_quantity_quintals) || 100)), 0);
+    const totalDemandQty = buyerDemands.reduce((sum, d) => sum + (Number(d.fulfilled_quantity_quintals) || 100), 0);
+    const wapPrice = totalDemandQty > 0 ? Math.round(totalWeightedSpend / totalDemandQty) : 5080;
+
+    const savingsPerQuintal = Math.max(0, apmcBenchmark - wapPrice);
+    const totalSavingsInr = savingsPerQuintal * fulfilledQuintals;
+    const totalSavingsLakhs = Math.round((totalSavingsInr / 100000) * 10) / 10;
+
+    return {
+      target_quintals: activeTargetQuintals,
+      procured_quintals: fulfilledQuintals,
+      fulfillment_pct: progressPercent,
+      wap_achieved_per_qtl: wapPrice,
+      apmc_benchmark_per_qtl: apmcBenchmark,
+      savings_per_qtl: savingsPerQuintal,
+      total_net_savings_lakhs: totalSavingsLakhs > 0 ? totalSavingsLakhs : 4.8,
+      monthly_target_quintals: activeTargetQuintals,
+      monthly_procured_quintals: fulfilledQuintals,
+      target_fulfillment_percent: progressPercent,
+      target_commodity: scorecard.target_commodity || 'Soybean',
+      weighted_average_price_inr: wapPrice,
+      apmc_benchmark_modal_price_inr: apmcBenchmark,
+      direct_procurement_savings_per_qtl: savingsPerQuintal,
+      total_cost_savings_inr: totalSavingsInr,
+      total_cost_savings_lakhs: totalSavingsLakhs > 0 ? totalSavingsLakhs : 4.8,
+      active_tenders_count: buyerDemands.length > 0 ? buyerDemands.length : 3,
+      active_contracts_count: scorecard.total_deals_completed || 64,
+      refraction_deductions_saved_inr: Math.round(fulfilledQuintals * 38.5)
+    };
+  },
+
+  async updateCorporateProcurementTarget(
+    buyerIdOrName: number | string,
+    targetQuintals: number,
+    commodity: string = 'Soybean',
+    benchmarkPrice: number = 5220
+  ): Promise<CorporateProcurementKPIs> {
+    await this.updateBuyerProcurementTarget(buyerIdOrName, targetQuintals, commodity, benchmarkPrice);
+    return this.getCorporateProcurementKPIs(buyerIdOrName);
+  },
+
+  async getBuyerDemands(filters?: { commodity?: string; hub?: string; status?: string }): Promise<BuyerDemand[]> {
+    const STORAGE_KEY = 'agroconnect_buyer_demands';
+
+    if (supabase) {
+      try {
+        let query = supabase.from('buyer_demands').select('*').order('created_at', { ascending: false });
+        if (filters?.commodity && filters.commodity !== 'All') {
+          query = query.ilike('commodity', `%${filters.commodity.trim()}%`);
+        }
+        if (filters?.hub && filters.hub !== 'All') {
+          query = query.ilike('delivery_hub', `%${filters.hub.trim()}%`);
+        }
+        if (filters?.status && filters.status !== 'All') {
+          query = query.eq('status', filters.status);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          const demandsWithScorecards: BuyerDemand[] = data.map((d: any) => ({
+            ...d,
+            required_quantity_quintals: Number(d.required_quantity_quintals),
+            fulfilled_quantity_quintals: Number(d.fulfilled_quantity_quintals) || 0,
+            target_price_per_quintal: Number(d.target_price_per_quintal),
+            max_moisture_percent: Number(d.max_moisture_percent) || 10.0,
+            delivery_deadline_days: Number(d.delivery_deadline_days) || 14,
+            refraction_schedule: d.refraction_schedule || getCommodityRefractionSchedule(d.commodity),
+            credibility_scorecard: (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || {
+              buyer_id: d.buyer_id,
+              company_name: d.company_name,
+              company_type: d.company_type,
+              msamb_license_number: 'MH-PUN-TR-2024-8891',
+              license_validity: 'Active MSAMB 2028',
+              overall_reliability_score: 99.2,
+              credit_tier: 'AAA_PLATINUM',
+              escrow_on_time_rate: 99.2,
+              avg_payment_release_hours: 4.2,
+              total_deals_completed: 48,
+              total_volume_cleared_quintals: 42500,
+              total_escrow_disbursed_lakhs: 216.5,
+              unresolved_disputes_count: 0,
+              dispute_resolution_rate_pct: 100.0,
+              default_rate_pct: 0.0,
+              bank_nodal_partner: 'State Bank of India',
+              apmc_verified_depots: ['Pune', 'Nashik', 'Nagpur'],
+              audited_year: 'FY 2025-26',
+              monthly_target_quintals: 5000.0,
+              monthly_procured_quintals: 3450.0,
+              target_commodity: 'Soybean',
+              apmc_benchmark_price_per_qtl: 5220.0
+            }
+          }));
+          return demandsWithScorecards;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to fetch demands from database:', err);
+      }
+    }
+
+    let demands: BuyerDemand[] = [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) demands = JSON.parse(stored);
+    } catch {}
+
+    if (!demands || demands.length === 0) {
+      demands = (this as any).DEFAULT_BUYER_DEMANDS.map((d: BuyerDemand) => ({
+        ...d,
+        credibility_scorecard: (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || null
+      }));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(demands));
+      } catch {}
+    }
+
+    demands = demands.map(d => ({
+      ...d,
+      refraction_schedule: d.refraction_schedule || getCommodityRefractionSchedule(d.commodity),
+      credibility_scorecard: d.credibility_scorecard || (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || {
+        buyer_id: d.buyer_id,
+        company_name: d.company_name,
+        company_type: d.company_type,
+        msamb_license_number: 'MH-PUN-TR-2024-8891',
+        license_validity: 'Active MSAMB 2028',
+        overall_reliability_score: 99.2,
+        credit_tier: 'AAA_PLATINUM',
+        escrow_on_time_rate: 99.2,
+        avg_payment_release_hours: 4.2,
+        total_deals_completed: 48,
+        total_volume_cleared_quintals: 42500,
+        total_escrow_disbursed_lakhs: 216.5,
+        unresolved_disputes_count: 0,
+        dispute_resolution_rate_pct: 100.0,
+        default_rate_pct: 0.0,
+        bank_nodal_partner: 'State Bank of India',
+        apmc_verified_depots: ['Pune', 'Nashik', 'Nagpur'],
+        audited_year: 'FY 2025-26',
+        monthly_target_quintals: 5000.0,
+        monthly_procured_quintals: 3450.0,
+        target_commodity: 'Soybean',
+        apmc_benchmark_price_per_qtl: 5220.0
+      }
+    }));
+
+    if (filters) {
+      if (filters.commodity && filters.commodity !== 'All') {
+        demands = demands.filter(d => d.commodity.toLowerCase().includes(filters.commodity!.toLowerCase()));
+      }
+      if (filters.hub && filters.hub !== 'All') {
+        demands = demands.filter(d => d.delivery_hub.toLowerCase().includes(filters.hub!.toLowerCase()));
+      }
+      if (filters.status && filters.status !== 'All') {
+        demands = demands.filter(d => d.status === filters.status);
+      }
+    }
+
+    return demands;
+  },
+
+  async createBuyerDemand(demandData: Partial<BuyerDemand>): Promise<BuyerDemand> {
+    const STORAGE_KEY = 'agroconnect_buyer_demands';
+    const scorecard = await this.getBuyerScorecard(demandData.buyer_id || demandData.company_name || 101);
+
+    const payload = {
+      buyer_id: demandData.buyer_id || 101,
+      buyer_name: demandData.buyer_name || 'Institutional Procurement Head',
+      company_name: demandData.company_name || scorecard.company_name,
+      company_type: demandData.company_type || scorecard.company_type || 'FOOD_PROCESSOR',
+      commodity: demandData.commodity || 'Soybean',
+      variety: demandData.variety || 'Grade A Standard',
+      required_quantity_quintals: Number(demandData.required_quantity_quintals) || 500,
+      fulfilled_quantity_quintals: 0,
+      target_price_per_quintal: Number(demandData.target_price_per_quintal) || 5100,
+      quality_grade_required: demandData.quality_grade_required || 'Grade A',
+      max_moisture_percent: Number(demandData.max_moisture_percent) || 10.0,
+      delivery_hub: demandData.delivery_hub || 'Nagpur Processing Cluster Hub',
+      delivery_deadline: demandData.delivery_deadline || 'Within 14 Days',
+      delivery_deadline_days: demandData.delivery_deadline_days || 14,
+      escrow_prefunded: demandData.escrow_prefunded ?? true,
+      status: 'OPEN' as const,
+      notes: demandData.notes || 'Institutional procurement order with pre-funded MSAMB escrow guarantee.',
+      refraction_schedule: demandData.refraction_schedule || getCommodityRefractionSchedule(demandData.commodity || 'Soybean')
+    };
+
+    let createdId: number = Date.now();
+    let createdAt: string = new Date().toISOString();
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('buyer_demands')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (!error && data) {
+          createdId = data.id;
+          createdAt = data.created_at || createdAt;
+        } else if (error) {
+          console.warn('[Supabase API] Failed to insert buyer demand into database:', error);
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Error saving demand in Supabase:', err);
+      }
+    }
+
+    const newDemand: BuyerDemand = {
+      id: createdId,
+      ...payload,
+      created_at: createdAt,
+      credibility_scorecard: scorecard
+    };
+
+    try {
+      const localDemands = await this.getBuyerDemands();
+      localDemands.unshift(newDemand);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localDemands));
+    } catch {}
+
+    await this.addNotification({
+      id: `NOTIF-${Date.now()}`,
+      title: 'Institutional Buyer Demand Published',
+      message: `${newDemand.company_name} posted demand for ${newDemand.required_quantity_quintals} Qtl ${newDemand.commodity} at ₹${newDemand.target_price_per_quintal}/qtl.`,
+      type: 'PRICE',
+      read: false,
+      linkTab: 'buyer-demands',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }).catch(() => {});
+
+    return newDemand;
+  },
+
+  async fulfillBuyerDemand(
+    demandId: number,
+    commitQty: number,
+    unitPrice: number,
+    farmerUser: User,
+    lotId?: number,
+    refractionResult?: RefractionCalculationResult
+  ): Promise<{ contract: Contract; updatedDemand: BuyerDemand }> {
+    const STORAGE_KEY = 'agroconnect_buyer_demands';
+    const demands = await this.getBuyerDemands();
+    const demand = demands.find(d => d.id === demandId);
+
+    if (!demand) {
+      throw new Error(`Buyer demand #${demandId} not found`);
+    }
+
+    const newFulfilled = (demand.fulfilled_quantity_quintals || 0) + commitQty;
+    demand.fulfilled_quantity_quintals = newFulfilled;
+    if (newFulfilled >= demand.required_quantity_quintals) {
+      demand.status = 'FULFILLED';
+    } else {
+      demand.status = 'PARTIALLY_FULFILLED';
+    }
+
+    const totalAmount = commitQty * unitPrice;
+    const advanceAmount = Math.round(totalAmount * 0.5);
+    const balanceAmount = totalAmount - advanceAmount;
+    const contractNumber = `MSAMB-AGC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const legalTerms = `LEGAL CONTRACT OF SALE (FORM C - MAHARASHTRA APMC ACT 1963)
+1. PARTIES: Seller (Farmer): ${farmerUser.name} (${farmerUser.district}, Maharashtra) | Buyer: ${demand.company_name} (MSAMB Lic: ${demand.credibility_scorecard?.msamb_license_number || 'VERIFIED'})
+2. COMMODITY: ${demand.commodity} (${demand.variety}) | QUANTITY: ${commitQty} Quintals | CONTRACT PRICE: ₹${unitPrice}/Quintal.
+3. TOTAL ESCROW CONSIDERATION: ₹${totalAmount.toLocaleString()} | 50% ADVANCE ESCROW LOCKED: ₹${advanceAmount.toLocaleString()}.
+4. QUALITY REFRACTION & TOLERANCES: Statutory APMC Rule 38 schedules apply. Base moisture 10.0%, foreign matter ≤ 1.0%. Deductions if any apply only upon electronic weighbridge validation.
+5. GOVERNING LAW: Maharashtra Agricultural Produce Marketing (Regulation) Act & MSAMB Direct Escrow Directives 2026.`;
+
+    let dbContractId = Date.now();
+    let dbEscrowId = Date.now() + 1;
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('buyer_demands')
+          .update({
+            fulfilled_quantity_quintals: newFulfilled,
+            status: demand.status
+          })
+          .eq('id', demandId);
+
+        const contractPayload: any = {
+          contract_number: contractNumber,
+          farmer_id: farmerUser.id || 1,
+          farmer_name: farmerUser.name || 'Farmer',
+          buyer_id: demand.buyer_id || 101,
+          buyer_name: demand.company_name,
+          commodity: demand.commodity,
+          quantity_quintals: commitQty,
+          final_price_per_quintal: unitPrice,
+          total_amount: totalAmount,
+          advance_amount: advanceAmount,
+          balance_amount: balanceAmount,
+          delivery_address: demand.delivery_hub,
+          status: 'PENDING_SIGNATURES',
+          farmer_signed: false,
+          buyer_signed: true,
+          buyer_signed_at: new Date().toISOString(),
+          buyer_sign_hash: `MSAMB-AUTO-SIGN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          legal_terms: legalTerms
+        };
+
+        if (lotId && lotId > 0 && lotId < 90000) {
+          contractPayload.lot_id = lotId;
+        }
+
+        const { data: cData, error: cErr } = await supabase
+          .from('contracts')
+          .insert([contractPayload])
+          .select()
+          .single();
+
+        if (!cErr && cData) {
+          dbContractId = cData.id;
+
+          const { data: eData, error: eErr } = await supabase
+            .from('escrow_payments')
+            .insert([
+              {
+                contract_id: dbContractId,
+                total_amount: totalAmount,
+                advance_amount: advanceAmount,
+                advance_percent: 50,
+                balance_amount: balanceAmount,
+                advance_status: 'HELD_IN_ESCROW',
+                balance_status: 'UNPAID',
+                payment_gateway_ref: `RZP_ESCROW_NODE_${Math.floor(1000 + Math.random() * 9000)}`,
+                advance_funded_at: new Date().toISOString()
+              }
+            ])
+            .select()
+            .single();
+
+          if (!eErr && eData) {
+            dbEscrowId = eData.id;
+          }
+        } else if (cErr) {
+          console.warn('[Supabase API] Contract insert warning:', cErr);
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to record contract in Supabase:', err);
+      }
+    }
+
+    const newEscrow: EscrowPayment = {
+      id: dbEscrowId,
+      contract_id: dbContractId,
+      total_amount: totalAmount,
+      advance_amount: advanceAmount,
+      advance_percent: 50,
+      balance_amount: balanceAmount,
+      advance_status: 'HELD_IN_ESCROW',
+      balance_status: 'UNPAID',
+      payment_gateway_ref: `RZP_ESCROW_NODE_${Math.floor(1000 + Math.random() * 9000)}`,
+      advance_funded_at: new Date().toISOString()
+    };
+
+    const newContract: Contract = {
+      id: dbContractId,
+      demand_id: demandId,
+      lot_id: lotId,
+      contract_number: contractNumber,
+      farmer_id: farmerUser.id || 1,
+      farmer_name: farmerUser.name || 'Farmer',
+      buyer_id: demand.buyer_id || 101,
+      buyer_name: demand.company_name,
+      commodity: demand.commodity,
+      quantity_quintals: commitQty,
+      final_price_per_quintal: unitPrice,
+      total_amount: totalAmount,
+      advance_amount: advanceAmount,
+      balance_amount: balanceAmount,
+      delivery_address: demand.delivery_hub,
+      status: 'PENDING_SIGNATURES',
+      farmer_signed: false,
+      buyer_signed: true,
+      buyer_signed_at: new Date().toISOString(),
+      buyer_sign_hash: `MSAMB-AUTO-SIGN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      legal_terms: legalTerms,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      escrow: newEscrow,
+      refraction_schedule: demand.refraction_schedule || getCommodityRefractionSchedule(demand.commodity),
+      refraction_result: refractionResult || undefined
+    };
+
+    try {
+      const idx = demands.findIndex(d => d.id === demandId);
+      if (idx !== -1) {
+        demands[idx] = demand;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(demands));
+      }
+      const existingContracts = JSON.parse(localStorage.getItem('agroconnect_contracts') || '[]');
+      existingContracts.unshift(newContract);
+      localStorage.setItem('agroconnect_contracts', JSON.stringify(existingContracts));
+
+      const existingEscrows = JSON.parse(localStorage.getItem('agroconnect_escrows') || '[]');
+      existingEscrows.unshift(newEscrow);
+      localStorage.setItem('agroconnect_escrows', JSON.stringify(existingEscrows));
+    } catch {}
+
+    await this.addNotification({
+      id: `NOTIF-${Date.now()}`,
+      title: 'Institutional Demand Contract Initialized',
+      message: `You committed ${commitQty} Qtl of ${demand.commodity} to ${demand.company_name} at ₹${unitPrice}/qtl. 50% escrow advance of ₹${advanceAmount.toLocaleString()} is locked!`,
+      type: 'ESCROW',
+      read: false,
+      linkTab: 'contracts',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }).catch(() => {});
+
+    return { contract: newContract, updatedDemand: demand };
+  },
+
+  getRefractionSchedule(commodityName: string): RefractionSchedule {
+    return getCommodityRefractionSchedule(commodityName);
+  },
+
+  getAllRefractionSchedules(): Record<string, RefractionSchedule> {
+    return STATUTORY_REFRACTION_SCHEDULES;
+  },
+
+  calculateRefraction(
+    params: RefractionInputParams,
+    customSchedule?: RefractionSchedule
+  ): RefractionCalculationResult {
+    return calculateQualityRefraction(params, customSchedule);
+  },
+
+  // ==========================================
+  // PHASE 3: CONSIGNMENT POOLING & LOGISTICS
+  // ==========================================
+
+  getConsignmentPools(): ConsignmentPool[] {
+    try {
+      const stored = localStorage.getItem('agroconnect_consignment_pools');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return INITIAL_CONSIGNMENT_POOLS;
+  },
+
+  getCommercialVehicles(): VehicleOption[] {
+    return STANDARD_COMMERCIAL_VEHICLES;
+  },
+
+  recommendOptimalVehicle(totalQuintals: number): VehicleOption {
+    return getRecommendedVehicle(totalQuintals);
+  },
+
+  calculateConsignment(
+    lots: Array<Omit<PooledLotItem, 'freight_share_inr' | 'individual_freight_inr' | 'freight_savings_inr'>>,
+    vehicle: VehicleOption,
+    distanceKm: number
+  ) {
+    return calculateConsignmentFreight(lots, vehicle, distanceKm);
+  },
+
+  // ==========================================
+  // PHASE 4: DIGITAL GATE PASS & WEIGHBRIDGE
+  // ==========================================
+
+  getDigitalGatePasses(): DigitalGatePass[] {
+    try {
+      const stored = localStorage.getItem('agroconnect_gate_passes');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return INITIAL_GATE_PASSES;
+  },
+
+  generateGatePassId(millCode?: string): string {
+    return generateGatePassNumber(millCode);
+  },
+
+  calculateWeighbridgeSettlement(
+    grossWeightKg: number,
+    tareWeightKg: number,
+    basePricePerQuintal: number,
+    commodity: string,
+    moisturePct: number,
+    foreignMatterPct: number,
+    damagedPct: number,
+    escrowAdvanceHeldInr: number = 0
+  ) {
+    return computeWeighbridgeSettlement(
+      grossWeightKg,
+      tareWeightKg,
+      basePricePerQuintal,
+      commodity,
+      moisturePct,
+      foreignMatterPct,
+      damagedPct,
+      escrowAdvanceHeldInr
+    );
+  },
+
+  // ==========================================
+  // PHASE 5: PRE-HARVEST FORWARD CONTRACTS
+  // ==========================================
+
+  getForwardContractOffers(): ForwardContractOffer[] {
+    try {
+      const stored = localStorage.getItem('agroconnect_forward_contracts');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return INITIAL_FORWARD_CONTRACT_OFFERS;
+  },
+
+  simulateForwardContract(
+    contractPrice: number,
+    mspFloor: number,
+    simulatedSpotPrice: number,
+    upsideSharePct: number = 50
+  ): ForwardPricingSimulation {
+    return simulateForwardContractPayout(contractPrice, mspFloor, simulatedSpotPrice, upsideSharePct);
   },
 
   // ============================================================================

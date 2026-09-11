@@ -3,9 +3,22 @@ import {
   Package, ShieldCheck, Clock, ArrowRight, 
   Printer, Plus, 
   MessageSquare, Building2, X, QrCode, Check,
-  Trash2, AlertTriangle, Users, Sparkles
+  Trash2, AlertTriangle, Users, Sparkles,
+  Truck, Send, Navigation, FileText
 } from 'lucide-react';
-import { api, type User, type ProduceLot, type RFQ, type Contract, type CommodityPrice, type BuyerDemand, type BuyerReliabilityScorecard } from '../services/api';
+import { 
+  api, 
+  type User, 
+  type ProduceLot, 
+  type RFQ, 
+  type Contract, 
+  type CommodityPrice, 
+  type BuyerDemand, 
+  type BuyerReliabilityScorecard,
+  type BuyerMatch,
+  type LogisticsBooking,
+  type LogisticsStatus
+} from '../services/api';
 import type { FPOPooledBatch, AIQualityAssayResult } from '../types';
 import { AIQualityAssayModal } from './AIQualityAssayModal';
 import { BuyerScorecardModal } from './BuyerScorecardModal';
@@ -146,6 +159,17 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       setMspPrices(allMsp);
       setFpoPools(allPools);
       setBuyerDemands(allDemands);
+
+      // Compute AI matches for all lots
+      const matchesMap: Record<number, BuyerMatch[]> = {};
+      await Promise.all(allLots.map(async (l) => {
+        try {
+          matchesMap[l.id] = await api.getMatchedBuyersForLot(l);
+        } catch {
+          matchesMap[l.id] = [];
+        }
+      }));
+      setMatchesPerLot(matchesMap);
     } catch (e) {
       console.error('Error loading farmer data:', e);
     }
@@ -385,6 +409,127 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       alert(`Failed to remove lot: ${err?.message || 'Unknown error'}`);
     } finally {
       setIsDeletingLot(false);
+    }
+  };
+
+  const handleOpenPitchModal = (lot: ProduceLot, match: BuyerMatch) => {
+    if (!currentUser) {
+      if (onRequireAuth) {
+        onRequireAuth(
+          lang === 'MR'
+            ? 'थेट खरेदीदाराला शेतमाल ऑफर पाठवण्यासाठी कृपया लॉगिन करा.'
+            : 'Connecting to direct institutional buyer pitch channel requires authentication. Please sign in first.',
+          () => {
+            setPitchTargetLot(lot);
+            setPitchTargetBuyer(match);
+            setPitchPrice(match.standing_bid_price || lot.base_price_per_quintal);
+            setPitchCustomMsg(`Farmer Direct Pitch: Lot #${lot.id} (${lot.commodity} - ${lot.variety || 'Grade A'}) — ${lot.quantity_quintals} Qtl @ ₹${match.standing_bid_price || lot.base_price_per_quintal}/qtl. Moisture: ${lot.moisture_percent}%, NABL Certified. Ready for immediate dispatch.`);
+          }
+        );
+      }
+      return;
+    }
+    setPitchTargetLot(lot);
+    setPitchTargetBuyer(match);
+    setPitchPrice(match.standing_bid_price || lot.base_price_per_quintal);
+    setPitchCustomMsg(`Farmer Direct Pitch: Lot #${lot.id} (${lot.commodity} - ${lot.variety || 'Grade A'}) — ${lot.quantity_quintals} Qtl @ ₹${match.standing_bid_price || lot.base_price_per_quintal}/qtl. Moisture: ${lot.moisture_percent}%, NABL Certified. Ready for immediate dispatch.`);
+  };
+
+  const handleConfirmSendPitch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pitchTargetLot || !pitchTargetBuyer) return;
+    const price = Number(pitchPrice);
+    if (!price || price <= 0) {
+      alert('Please enter a valid pitch rate in ₹/quintal.');
+      return;
+    }
+
+    setIsPitching(true);
+    try {
+      const { rfq } = await api.sendDirectLotPitch(
+        pitchTargetLot.id,
+        pitchTargetBuyer.buyer_id,
+        price,
+        pitchCustomMsg
+      );
+
+      setLotSuccessMsg(
+        lang === 'MR'
+          ? `✓ ${pitchTargetBuyer.company_name} यांना थेट शेतमाल ऑफर (₹${price}/क्विंटल) पाठवली! RFQ #${rfq.id} तयार झाला.`
+          : `✓ Direct pitch successfully sent to ${pitchTargetBuyer.company_name} at ₹${price.toLocaleString()}/qtl! RFQ #${rfq.id} created with 24h response window.`
+      );
+      setTimeout(() => setLotSuccessMsg(''), 7000);
+      setPitchTargetLot(null);
+      setPitchTargetBuyer(null);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error sending pitch:', err);
+      alert(`Failed to send pitch: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsPitching(false);
+    }
+  };
+
+  const handleOpenLogisticsForLot = async (lot: ProduceLot) => {
+    const existing = await api.getLogisticsBooking(undefined, lot.id);
+    if (existing) {
+      setActiveLogisticsBooking(existing);
+    } else {
+      setBookNetWeight(lot.quantity_quintals);
+      setBookPickupLocation(`${lot.mandi_name || 'APMC Yard'}, ${lot.district}`);
+      setBookDeliveryLocation('ADM Agro Processing Silo, Latur MIDC');
+    }
+    setShowLogisticsModal(true);
+  };
+
+  const handleAdvanceTransitMilestone = async (targetStatus: LogisticsStatus) => {
+    if (!activeLogisticsBooking) return;
+    setIsUpdatingTransit(true);
+    try {
+      const updated = await api.updateLogisticsStatus(activeLogisticsBooking.id, targetStatus);
+      setActiveLogisticsBooking(updated);
+      setLotSuccessMsg(`✓ Transit status updated: ${targetStatus.replace(/_/g, ' ')}`);
+      setTimeout(() => setLotSuccessMsg(''), 5000);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error advancing transit:', err);
+      alert(`Failed to update transit status: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsUpdatingTransit(false);
+    }
+  };
+
+  const handleBookTransporter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsBookingTruck(true);
+    try {
+      const targetLot = lots[0] || (lots.length > 0 ? lots[0] : null);
+      const targetContract = contracts[0] || null;
+
+      const newBooking = await api.createLogisticsBooking({
+        vehicle_number: bookVehicleNo,
+        vehicle_type: bookVehicleType,
+        driver_name: bookDriverName,
+        driver_phone: bookDriverPhone,
+        transporter_name: bookTransporterName,
+        pickup_location: bookPickupLocation,
+        delivery_location: bookDeliveryLocation,
+        net_weight_quintals: Number(bookNetWeight) || 120,
+        commodity: targetLot?.commodity || 'Agricultural Produce',
+        farmer_name: currentUser?.name || targetLot?.farmer_name || 'Farmer',
+        buyer_name: targetContract?.buyer_name || 'ADM Agro Industries India Pvt. Ltd.',
+        contract_id: targetContract?.id || 301,
+        contract_number: targetContract?.contract_number || 'AGC-MH-20260911-8821'
+      });
+      setActiveLogisticsBooking(newBooking);
+      setLogisticsModalTab('PROGRESSION');
+      setLotSuccessMsg(`✓ Transporter booked! APMC e-Gate Pass #${newBooking.gate_pass_code} generated.`);
+      setTimeout(() => setLotSuccessMsg(''), 7000);
+    } catch (err: any) {
+      console.error('Error booking transporter:', err);
+      alert(`Failed to book transporter: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsBookingTruck(false);
     }
   };
 
@@ -1111,7 +1256,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
                                 {/* Match highlight tags */}
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                  {match.match_reasons.slice(0, 2).map((reason, rIdx) => (
+                                  {match.match_reasons.slice(0, 2).map((reason: string, rIdx: number) => (
                                     <span 
                                       key={rIdx}
                                       style={{ 
@@ -2386,6 +2531,758 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           </div>
         </div>
       )}
+      {/* GAP 4: DIRECT LOT PITCH MODAL (ONE-CLICK OFFER TO MATCHED BUYER) */}
+      {pitchTargetLot && pitchTargetBuyer && (
+        <div 
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+        >
+          <div 
+            className="gov-card"
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 'var(--radius-md)',
+              width: '100%',
+              maxWidth: '560px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '90vh'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ 
+              padding: '16px 20px', 
+              backgroundColor: '#065f46', 
+              color: '#ffffff', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Sparkles size={20} color="#a7f3d0" />
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>
+                    {lang === 'MR' ? 'थेट खरेदीदाराला शेतमाल ऑफर पाठवा' : 'Direct Produce Pitch to Matched Buyer'}
+                  </h3>
+                  <div style={{ fontSize: '0.72rem', color: '#a7f3d0', marginTop: '2px' }}>
+                    {lang === 'MR' ? 'एआय मॅच स्कोर व हमीभाव आधारित थेट करार' : 'AI-Optimized Multi-Factor Matchmaking Channel'}
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setPitchTargetLot(null);
+                  setPitchTargetBuyer(null);
+                }}
+                style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleConfirmSendPitch} style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Target Buyer Summary Strip */}
+              <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div>
+                    <strong style={{ fontSize: '0.95rem', color: '#065f46' }}>{pitchTargetBuyer.company_name}</strong>
+                    <div style={{ fontSize: '0.74rem', color: '#047857' }}>
+                      {pitchTargetBuyer.district}, Maharashtra • {pitchTargetBuyer.distance_km} km away
+                    </div>
+                  </div>
+                  <span style={{ 
+                    backgroundColor: '#059669', 
+                    color: '#ffffff', 
+                    fontSize: '0.74rem', 
+                    fontWeight: 800, 
+                    padding: '2px 8px', 
+                    borderRadius: '12px' 
+                  }}>
+                    {pitchTargetBuyer.match_score}% AI Match
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#065f46', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {pitchTargetBuyer.match_reasons.map((r, i) => (
+                    <span key={i} style={{ backgroundColor: '#ffffff', padding: '1px 6px', borderRadius: '3px', border: '1px solid #a7f3d0' }}>
+                      ✓ {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lot Highlights Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)' }}>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Lot Details</div>
+                  <strong style={{ fontSize: '0.8rem', color: '#0f172a' }}>
+                    {pitchTargetLot.commodity} ({pitchTargetLot.variety || 'Grade A'})
+                  </strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Quantity Available</div>
+                  <strong style={{ fontSize: '0.8rem', color: '#0f172a' }}>
+                    {pitchTargetLot.quantity_quintals} Qtl ({(pitchTargetLot.quantity_quintals / 10).toFixed(1)} MT)
+                  </strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Lab Moisture</div>
+                  <strong style={{ fontSize: '0.8rem', color: '#059669' }}>
+                    {pitchTargetLot.moisture_percent}% (NABL Tested)
+                  </strong>
+                </div>
+              </div>
+
+              {/* Pitch Price Input */}
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{lang === 'MR' ? 'थेट ऑफर दर (₹/क्विंटल)' : 'Pitched Rate (₹/Quintal)'}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>
+                    Buyer Standing Bid: ₹{pitchTargetBuyer.standing_bid_price}/qtl
+                  </span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#64748b' }}>₹</span>
+                  <input
+                    type="number"
+                    value={pitchPrice}
+                    onChange={(e) => setPitchPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    style={{ paddingLeft: '28px', fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}
+                    min={100}
+                    step={10}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Escrow Settlement Estimate */}
+              {(() => {
+                const effectiveRate = Number(pitchPrice) || pitchTargetBuyer.standing_bid_price;
+                const totalVal = effectiveRate * pitchTargetLot.quantity_quintals;
+                const advance50 = totalVal * 0.5;
+
+                return (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#065f46' }}>Estimated Total Consignment:</span>
+                      <strong style={{ fontSize: '0.92rem', color: '#065f46' }}>₹{totalVal.toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#047857' }}>
+                      <span>50% Upfront RBI Escrow Lock upon acceptance:</span>
+                      <strong style={{ color: '#059669' }}>₹{advance50.toLocaleString()}</strong>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Pitch Custom Message */}
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                  {lang === 'MR' ? 'खरेदीदारासाठी टीप / संदेश' : 'Direct Pitch Message / Notes for Buyer'}:
+                </label>
+                <textarea
+                  rows={3}
+                  value={pitchCustomMsg}
+                  onChange={(e) => setPitchCustomMsg(e.target.value)}
+                  style={{ width: '100%', fontSize: '0.78rem', padding: '8px 10px' }}
+                  placeholder="Mention quality highlights, packaging, or dispatch readiness..."
+                />
+              </div>
+
+              {/* Form Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  className="btn-gov-secondary"
+                  onClick={() => {
+                    setPitchTargetLot(null);
+                    setPitchTargetBuyer(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-gov-primary"
+                  style={{ backgroundColor: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  disabled={isPitching}
+                >
+                  <Send size={14} />
+                  {isPitching 
+                    ? (lang === 'MR' ? 'ऑफर पाठवत आहे...' : 'Transmitting Pitch...') 
+                    : (lang === 'MR' ? 'थेट ऑफर पाठवा' : 'Transmit Direct Pitch')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GAP 5: LOGISTICS COORDINATION & APMC TRANSIT GATE PASS MODAL */}
+      {showLogisticsModal && (
+        <div 
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+        >
+          <div 
+            className="gov-card"
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 'var(--radius-md)',
+              width: '100%',
+              maxWidth: '820px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '92vh'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ 
+              padding: '16px 20px', 
+              backgroundColor: '#1e3a8a', 
+              color: '#ffffff', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Truck size={22} color="#93c5fd" />
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>
+                    {lang === 'MR' ? 'शेतमाल वाहतूक समन्वय व डिजिटल ई-गेट पास' : 'Logistics Coordination & APMC Transit Gate Pass'}
+                  </h3>
+                  <div style={{ fontSize: '0.72rem', color: '#93c5fd', marginTop: '2px' }}>
+                    Maharashtra State Agricultural Marketing Board (MSAMB) Electronic Gate Registry
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowLogisticsModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Tab Pills Strip */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', padding: '0 16px' }}>
+              <button
+                type="button"
+                onClick={() => setLogisticsModalTab('PROGRESSION')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '12px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderBottom: logisticsModalTab === 'PROGRESSION' ? '3px solid #1e3a8a' : '3px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: logisticsModalTab === 'PROGRESSION' ? '#1e3a8a' : '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <Navigation size={15} />
+                <span>{lang === 'MR' ? '४-टप्प्यांची वाहतूक प्रगती' : '4-Stage Transit Milestones'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLogisticsModalTab('E_GATE_PASS')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '12px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderBottom: logisticsModalTab === 'E_GATE_PASS' ? '3px solid #1e3a8a' : '3px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: logisticsModalTab === 'E_GATE_PASS' ? '#1e3a8a' : '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <FileText size={15} />
+                <span>{lang === 'MR' ? 'अधिकृत ई-गेट पास व QR' : 'Official APMC e-Gate Pass & QR'}</span>
+                {activeLogisticsBooking && (
+                  <span style={{ fontSize: '0.66rem', backgroundColor: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '8px' }}>
+                    #{activeLogisticsBooking.gate_pass_code}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLogisticsModalTab('BOOK_TRUCK')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '12px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderBottom: logisticsModalTab === 'BOOK_TRUCK' ? '3px solid #1e3a8a' : '3px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: logisticsModalTab === 'BOOK_TRUCK' ? '#1e3a8a' : '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={15} />
+                <span>{lang === 'MR' ? 'वाहतूकदार / ट्रक बुक करा' : 'Book Truck / Transporter'}</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* TAB 1: 4-STAGE TRANSIT PROGRESSION */}
+              {logisticsModalTab === 'PROGRESSION' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {activeLogisticsBooking ? (
+                    <>
+                      {/* Booking Quick Stats Bar */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', backgroundColor: '#f1f5f9', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Assigned Vehicle</div>
+                          <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{activeLogisticsBooking.vehicle_number}</strong>
+                          <div style={{ fontSize: '0.68rem', color: '#475569' }}>{activeLogisticsBooking.vehicle_type}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Driver / Contact</div>
+                          <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{activeLogisticsBooking.driver_name}</strong>
+                          <div style={{ fontSize: '0.68rem', color: '#475569' }}>{activeLogisticsBooking.driver_phone}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Net Dispatch Weight</div>
+                          <strong style={{ fontSize: '0.88rem', color: '#059669' }}>{activeLogisticsBooking.net_weight_quintals} Quintals</strong>
+                          <div style={{ fontSize: '0.68rem', color: '#475569' }}>{activeLogisticsBooking.commodity}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Freight Charge</div>
+                          <strong style={{ fontSize: '0.88rem', color: '#0284c7' }}>₹{activeLogisticsBooking.freight_charge.toLocaleString()}</strong>
+                          <div style={{ fontSize: '0.68rem', color: '#475569' }}>{activeLogisticsBooking.distance_km} km distance</div>
+                        </div>
+                      </div>
+
+                      {/* Progression Step Cards */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {[
+                          {
+                            key: 'BOOKED',
+                            title: '1. Vehicle Booked & Transporter Assigned',
+                            desc: 'Driver details locked, transit token registered in Maharashtra APMC Gateway.',
+                            done: true,
+                            current: activeLogisticsBooking.status === 'BOOKED'
+                          },
+                          {
+                            key: 'DISPATCHED_FARMGATE',
+                            title: '2. Farmgate Dispatch & GPS In-Transit',
+                            desc: 'Produce loaded onto vehicle at origin hub; GPS transit tracking active.',
+                            done: ['DISPATCHED_FARMGATE', 'WEIGHBRIDGE_SCANNED', 'APMC_WEIGHBRIDGE_SCANNED', 'DELIVERED_UNLOADED', 'DELIVERED_ACCEPTED'].includes(activeLogisticsBooking.status),
+                            current: activeLogisticsBooking.status === 'DISPATCHED_FARMGATE',
+                            actionBtn: 'Confirm Farmgate Dispatch'
+                          },
+                          {
+                            key: 'WEIGHBRIDGE_SCANNED',
+                            title: '3. APMC Electronic Weighbridge Gross & Tare Scan',
+                            desc: 'Vehicle weighed at electronic weighbridge; gross and tare weights recorded with cryptographic stamp.',
+                            done: ['WEIGHBRIDGE_SCANNED', 'APMC_WEIGHBRIDGE_SCANNED', 'DELIVERED_UNLOADED', 'DELIVERED_ACCEPTED'].includes(activeLogisticsBooking.status),
+                            current: activeLogisticsBooking.status === 'WEIGHBRIDGE_SCANNED' || activeLogisticsBooking.status === 'APMC_WEIGHBRIDGE_SCANNED',
+                            actionBtn: 'Simulate Electronic Weighbridge Verification'
+                          },
+                          {
+                            key: 'DELIVERED_UNLOADED',
+                            title: '4. Buyer Processing Silo Arrival & Final Acceptance',
+                            desc: 'Produce unloaded and approved at destination terminal; final 50% escrow release triggered.',
+                            done: ['DELIVERED_UNLOADED', 'DELIVERED_ACCEPTED'].includes(activeLogisticsBooking.status),
+                            current: activeLogisticsBooking.status === 'DELIVERED_UNLOADED' || activeLogisticsBooking.status === 'DELIVERED_ACCEPTED',
+                            actionBtn: 'Confirm Destination Unloading & Accept'
+                          }
+                        ].map((step, sIdx) => (
+                          <div 
+                            key={step.key}
+                            style={{
+                              border: `1px solid ${step.current ? '#0284c7' : step.done ? '#86efac' : '#e2e8f0'}`,
+                              backgroundColor: step.current ? '#f0f9ff' : step.done ? '#f0fdf4' : '#ffffff',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '12px 14px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <div style={{
+                                width: '22px',
+                                height: '22px',
+                                borderRadius: '50%',
+                                backgroundColor: step.done ? '#16a34a' : step.current ? '#0284c7' : '#cbd5e1',
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                flexShrink: 0
+                              }}>
+                                {step.done ? '✓' : sIdx + 1}
+                              </div>
+                              <div>
+                                <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>{step.title}</strong>
+                                <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '2px' }}>{step.desc}</div>
+                              </div>
+                            </div>
+
+                            {step.actionBtn && !step.done && (
+                              <button
+                                type="button"
+                                className="btn-gov-primary"
+                                style={{ fontSize: '0.74rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                                disabled={isUpdatingTransit}
+                                onClick={() => handleAdvanceTransitMilestone(step.key as LogisticsStatus)}
+                              >
+                                {isUpdatingTransit ? 'Updating...' : step.actionBtn}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                      <Truck size={36} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
+                      <h4 style={{ color: '#0f172a', margin: '0 0 6px' }}>No Active Transporter Booked Yet</h4>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '400px', margin: '0 auto 16px' }}>
+                        Book an official agricultural vehicle to generate your APMC e-Gate Pass and start GPS-linked dispatch tracking.
+                      </p>
+                      <button
+                        className="btn-gov-primary"
+                        style={{ backgroundColor: '#1e3a8a', margin: '0 auto' }}
+                        onClick={() => setLogisticsModalTab('BOOK_TRUCK')}
+                      >
+                        Book Transporter Now
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: PRINTABLE OFFICIAL APMC e-GATE PASS & DISPATCH QR */}
+              {logisticsModalTab === 'E_GATE_PASS' && activeLogisticsBooking && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Print Action Bar */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                      Recognized by Maharashtra State APMC Electronic Weighbridges & Toll Plazas
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-gov-secondary"
+                      onClick={() => window.print()}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', borderColor: '#1e3a8a', color: '#1e3a8a' }}
+                    >
+                      <Printer size={14} /> Print Official Pass (A4)
+                    </button>
+                  </div>
+
+                  {/* Pass Sheet (Official Styling) */}
+                  <div 
+                    id="apmc-transit-gate-pass"
+                    style={{
+                      border: '2px solid #1e3a8a',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '24px',
+                      backgroundColor: '#ffffff',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '16px',
+                      fontFamily: 'var(--font-body)'
+                    }}
+                  >
+                    {/* Header with Emblem */}
+                    <div style={{ textAlign: 'center', borderBottom: '2px solid #1e3a8a', paddingBottom: '14px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.08em', color: '#1e3a8a', textTransform: 'uppercase' }}>
+                        Government of Maharashtra • Department of Co-operation & Marketing
+                      </div>
+                      <h3 style={{ fontSize: '1.25rem', color: '#0f172a', margin: '4px 0 2px', fontWeight: 800 }}>
+                        MAHARASHTRA STATE AGRICULTURAL MARKETING BOARD (MSAMB)
+                      </h3>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#059669' }}>
+                        ELECTRONIC INTER-DISTRICT APMC TRANSIT GATE PASS & WEIGHMENT SLIP
+                      </div>
+                    </div>
+
+                    {/* Metadata Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', backgroundColor: '#f8fafc', padding: '12px', border: '1px solid #e2e8f0' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Gate Pass Token #</div>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e3a8a', fontFamily: 'monospace' }}>
+                          {activeLogisticsBooking.gate_pass_code}
+                        </strong>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Contract Reference #</div>
+                        <strong style={{ fontSize: '0.85rem', color: '#0f172a', fontFamily: 'monospace' }}>
+                          {activeLogisticsBooking.contract_number || 'AGC-MH-2026-DIRECT'}
+                        </strong>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Issuance Date & Time</div>
+                        <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                          {new Date(activeLogisticsBooking.created_at).toLocaleString()}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Parties & Logistics Details */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ border: '1px solid #e2e8f0', padding: '12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1e3a8a', textTransform: 'uppercase', marginBottom: '6px' }}>
+                          Consignor & Consignee
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div><strong>Farmer / Seller:</strong> {activeLogisticsBooking.farmer_name || currentUser?.name || 'Ramesh B. Patil'}</div>
+                          <div><strong>Buyer / Processor:</strong> {activeLogisticsBooking.buyer_name || 'ADM Agro Industries Pvt. Ltd.'}</div>
+                          <div><strong>Pickup:</strong> {activeLogisticsBooking.pickup_location}</div>
+                          <div><strong>Delivery Terminal:</strong> {activeLogisticsBooking.delivery_location}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ border: '1px solid #e2e8f0', padding: '12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1e3a8a', textTransform: 'uppercase', marginBottom: '6px' }}>
+                          Vehicle & Driver Particulars
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div><strong>Vehicle Reg No:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeLogisticsBooking.vehicle_number}</span></div>
+                          <div><strong>Vehicle Model:</strong> {activeLogisticsBooking.vehicle_type}</div>
+                          <div><strong>Driver Name:</strong> {activeLogisticsBooking.driver_name}</div>
+                          <div><strong>Driver Phone:</strong> {activeLogisticsBooking.driver_phone}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Weight & Freight Summary Strip */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#f0fdf4', padding: '12px', border: '1px solid #bbf7d0' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#065f46' }}>Commodity</div>
+                        <strong style={{ fontSize: '0.88rem', color: '#065f46' }}>{activeLogisticsBooking.commodity || 'Soybean'}</strong>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#065f46' }}>Net Weight</div>
+                        <strong style={{ fontSize: '0.88rem', color: '#065f46' }}>{activeLogisticsBooking.net_weight_quintals} Qtl</strong>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#065f46' }}>Freight Total</div>
+                        <strong style={{ fontSize: '0.88rem', color: '#065f46' }}>₹{activeLogisticsBooking.freight_charge.toLocaleString()}</strong>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#065f46' }}>Transit Status</div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#15803d' }}>
+                          {activeLogisticsBooking.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Validation Row with QR Token */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Cryptographic Security Hash:</div>
+                        <div style={{ fontSize: '0.68rem', fontFamily: 'monospace', color: '#64748b' }}>
+                          {activeLogisticsBooking.security_hash}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 700 }}>
+                        <ShieldCheck size={14} /> MSAMB Digitally Verified Transit Pass
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: BOOK TRUCK / TRANSPORTER FORM */}
+              {logisticsModalTab === 'BOOK_TRUCK' && (
+                <form onSubmit={handleBookTransporter} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontWeight: 700, fontSize: '0.86rem' }}>
+                      <Truck size={16} /> Direct Transporter Onboarding & e-Gate Pass Generation
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#1d4ed8', marginTop: '2px' }}>
+                      Assign a verified vehicle to lock pickup coordinates, calculate freight, and issue legal APMC transit token.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Vehicle Number (RTO Registered):
+                      </label>
+                      <input
+                        type="text"
+                        value={bookVehicleNo}
+                        onChange={(e) => setBookVehicleNo(e.target.value)}
+                        placeholder="e.g. MH-12-RN-8821"
+                        required
+                        style={{ fontFamily: 'monospace', fontWeight: 700 }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Vehicle Type / Capacity:
+                      </label>
+                      <select
+                        value={bookVehicleType}
+                        onChange={(e) => setBookVehicleType(e.target.value)}
+                        style={{ width: '100%', padding: '8px' }}
+                      >
+                        <option value="10-Ton Eicher Pro (120 Qtl Capacity)">10-Ton Eicher Pro (120 Qtl Capacity)</option>
+                        <option value="16-Ton BharatBenz Rigid (200 Qtl Capacity)">16-Ton BharatBenz Rigid (200 Qtl Capacity)</option>
+                        <option value="3-Ton Bolero Maxi Truck (35 Qtl Capacity)">3-Ton Bolero Maxi Truck (35 Qtl Capacity)</option>
+                        <option value="25-Ton Multi-Axle Trailer (300 Qtl Capacity)">25-Ton Multi-Axle Trailer (300 Qtl Capacity)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Driver Full Name:
+                      </label>
+                      <input
+                        type="text"
+                        value={bookDriverName}
+                        onChange={(e) => setBookDriverName(e.target.value)}
+                        placeholder="e.g. Tukaram Gaikwad"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Driver Contact Mobile:
+                      </label>
+                      <input
+                        type="text"
+                        value={bookDriverPhone}
+                        onChange={(e) => setBookDriverPhone(e.target.value)}
+                        placeholder="e.g. +91 98224 88210"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Transporter Agency:
+                      </label>
+                      <input
+                        type="text"
+                        value={bookTransporterName}
+                        onChange={(e) => setBookTransporterName(e.target.value)}
+                        placeholder="e.g. Mahatruck Krishi Logistics Federation"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Dispatch Consignment Weight (Quintals):
+                      </label>
+                      <input
+                        type="number"
+                        value={bookNetWeight}
+                        onChange={(e) => setBookNetWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="e.g. 120"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Pickup Location (Farmgate / APMC):
+                      </label>
+                      <input
+                        type="text"
+                        value={bookPickupLocation}
+                        onChange={(e) => setBookPickupLocation(e.target.value)}
+                        placeholder="e.g. Latur APMC Yard / Farmgate Hub"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                        Delivery Destination Hub / Processing Silo:
+                      </label>
+                      <input
+                        type="text"
+                        value={bookDeliveryLocation}
+                        onChange={(e) => setBookDeliveryLocation(e.target.value)}
+                        placeholder="e.g. ADM Agro MIDC Processing Silo, Latur"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                    <button
+                      type="button"
+                      className="btn-gov-secondary"
+                      onClick={() => setLogisticsModalTab('PROGRESSION')}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-gov-primary"
+                      style={{ backgroundColor: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      disabled={isBookingTruck}
+                    >
+                      <Truck size={14} />
+                      {isBookingTruck ? 'Assigning Vehicle...' : 'Confirm Transporter & Issue e-Gate Pass'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MSAMB Buyer Credibility Scorecard Modal */}
       <BuyerScorecardModal
         isOpen={showScorecardModal}

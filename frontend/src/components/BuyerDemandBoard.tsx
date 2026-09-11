@@ -227,8 +227,9 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
       const { contract, updatedDemand } = await api.fulfillBuyerDemand(
         targetDemand.id,
         qty,
-        Number(selectedLotId) || (targetDemand.id * 100),
+        targetDemand.target_price_per_quintal,
         effectiveUser,
+        Number(selectedLotId) || (targetDemand.id * 100),
         effectiveRefraction
       );
 
