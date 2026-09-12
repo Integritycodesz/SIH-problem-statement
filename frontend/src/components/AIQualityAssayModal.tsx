@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import type { AIQualityAssayResult } from '../types';
 import { 
-  Sparkles, Camera, Check, X, RefreshCw, UploadCloud 
+  Sparkles, Camera, Check, X, RefreshCw, UploadCloud, AlertTriangle 
 } from 'lucide-react';
 
 interface AIQualityAssayModalProps {
@@ -28,6 +28,7 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
   const [assayResult, setAssayResult] = useState<AIQualityAssayResult | null>(null);
   const [customImageUploaded, setCustomImageUploaded] = useState<boolean>(false);
   const [showCertificateView, setShowCertificateView] = useState<boolean>(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -134,13 +135,12 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
       setSelectedPreset(matchedPreset);
       setShowCertificateView(false);
       setCustomImageUploaded(false);
+      setScanError(null);
 
       const p = presets.find(item => item.id === matchedPreset);
-      const fullPreset = (api as any).KISAN_VISION_PRESETS?.[matchedPreset];
-      const initialImg = fullPreset?.image_url || p?.thumb || '';
-      setActiveImage(initialImg);
+      setActiveImage(p?.thumb || '');
 
-      // Trigger automatic scan for instantaneous responsiveness
+      // Trigger automatic scan
       triggerScan(matchedPreset, undefined, initialCommodity);
     }
   }, [isOpen, initialCommodity]);
@@ -150,213 +150,74 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
     if (!customImageUploaded && isOpen) {
       const p = presets.find(item => item.id === selectedPreset);
       if (p) {
-        const fullPreset = (api as any).KISAN_VISION_PRESETS?.[p.id];
-        setActiveImage(fullPreset?.image_url || p.thumb);
+        setActiveImage(p.thumb);
       }
     }
   }, [selectedPreset, customImageUploaded, isOpen]);
 
-  // Run AI Assay scan
+  // Run AI Assay scan via real backend CV service
   const triggerScan = async (presetIdToScan?: string, customImg?: string, targetComm?: string) => {
     setIsScanning(true);
-    setScanProgress(15);
-    setScanStage('Initializing Kisan Vision Optical Core (TensorFlow / OpenCV)...');
+    setScanProgress(10);
+    setScanStage('Uploading image to CV analysis service...');
     setAssayResult(null);
+    setScanError(null);
 
     const targetPreset = presetIdToScan || selectedPreset;
     const comm = targetComm || initialCommodity;
 
-    const stages = [
-      { progress: 30, label: 'Running Edge Contour & Morphometric Diameter Sizing (mm)...' },
-      { progress: 55, label: 'Evaluating Chromatic Pigmentation & Moisture Discoloration...' },
-      { progress: 75, label: 'Segmenting Foreign Matter, Chaff & Broken Grain Kernels...' },
-      { progress: 90, label: 'Cross-referencing Maharashtra APMC Rule 38 Statutory Tolerances...' },
-      { progress: 100, label: 'Issuing Cryptographic Digital Quality Assay Certificate...' }
-    ];
-
-    for (let i = 0; i < stages.length; i++) {
-      await new Promise(r => setTimeout(r, 180));
-      setScanProgress(stages[i].progress);
-      setScanStage(stages[i].label);
+    // Determine the image source to send to the backend:
+    // - customImg = base64 data URL from file upload
+    // - otherwise resolve preset to its thumbnail URL
+    let imageSource = customImg;
+    if (!imageSource) {
+      const p = presets.find(item => item.id === targetPreset);
+      imageSource = p?.thumb || targetPreset;
     }
 
+    setScanProgress(30);
+    setScanStage('Sending to backend computer vision engine...');
+
     try {
-      const result = await api.analyzeProduceQuality(customImg || targetPreset, comm);
+      setScanProgress(50);
+      setScanStage('Analyzing: segmentation, morphometry, pigmentation, defect detection...');
+
+      const result = await api.analyzeProduceQuality(imageSource, comm);
+
+      setScanProgress(100);
+      setScanStage('Analysis complete.');
+
       setAssayResult(result);
       if (result.image_url && !customImg) {
         setActiveImage(result.image_url);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Assay failed:', err);
+      setScanError(err.message || 'Quality analysis failed. Please ensure the backend service is running.');
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Draw overlay bounding boxes when scan finishes
+  // Clear canvas overlay when scan result changes
   useEffect(() => {
-    if (!canvasRef.current || !assayResult) return;
+    if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const isDefective = assayResult.grade_code === 'C';
-    const commLower = (assayResult.commodity || '').toLowerCase();
-
-    // 1. COTTON: Staple length & Trash segmentation
-    if (commLower.includes('cotton') || commLower.includes('kapas')) {
-      const fiberRegions = [
-        { x: 40, y: 60, w: 100, h: 90, label: 'Staple: 29.6mm (FAQ I)', color: '#06b6d4' },
-        { x: 170, y: 50, w: 110, h: 95, label: 'Staple: 29.2mm (FAQ I)', color: '#06b6d4' },
-        { x: 290, y: 70, w: 90, h: 90, label: 'Staple: 29.5mm (FAQ I)', color: '#06b6d4' },
-        { x: 100, y: 180, w: 110, h: 85, label: 'Staple: 29.4mm (FAQ I)', color: '#06b6d4' },
-        { x: 240, y: 170, w: 95, h: 95, label: 'Trash Speck (0.4%)', color: '#f59e0b', dash: true }
-      ];
-      fiberRegions.forEach(pt => {
-        ctx.strokeStyle = pt.color;
-        ctx.lineWidth = 2.5;
-        if (pt.dash) ctx.setLineDash([4, 4]);
-        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = pt.color;
-        ctx.fillRect(pt.x, pt.y - 20, pt.w + 30, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-      });
-      return;
-    }
-
-    // 2. TOMATO
-    if (commLower.includes('tomato')) {
-      const tomatoes = [
-        { x: 60, y: 50, w: 110, h: 110, label: 'Abhinav A: 59mm (98%)' },
-        { x: 220, y: 60, w: 115, h: 115, label: 'Abhinav A: 58mm (97%)' },
-        { x: 140, y: 170, w: 105, h: 105, label: 'Firm Red: 58mm (96%)' }
-      ];
-      tomatoes.forEach(pt => {
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-      });
-      return;
-    }
-
-    // 3. WHEAT
-    if (commLower.includes('wheat') || commLower.includes('gehun')) {
-      const wheatGrains = [
-        { x: 50, y: 60, w: 75, h: 75, label: 'Sharbati: 6.8mm' },
-        { x: 160, y: 50, w: 80, h: 80, label: 'Sharbati: 6.9mm' },
-        { x: 280, y: 70, w: 75, h: 75, label: 'Sharbati: 6.8mm' },
-        { x: 110, y: 180, w: 75, h: 75, label: 'Chaff: 0.6% (PASS)', isChaff: true },
-        { x: 230, y: 175, w: 80, h: 80, label: 'Sharbati: 6.7mm' }
-      ];
-      wheatGrains.forEach(pt => {
-        ctx.strokeStyle = pt.isChaff ? '#f59e0b' : '#10b981';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-
-        ctx.fillStyle = pt.isChaff ? '#f59e0b' : '#10b981';
-        ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-      });
-      return;
-    }
-
-    // 4. SOYBEAN
-    if (commLower.includes('soy')) {
-      if (isDefective) {
-        const soyDefects = [
-          { x: 60, y: 60, w: 85, h: 85, label: '⚠️ High Moisture (15.6%)', color: '#ef4444' },
-          { x: 180, y: 70, w: 80, h: 80, label: '⚠️ Green Immature (4.8%)', color: '#f59e0b' },
-          { x: 280, y: 60, w: 80, h: 80, label: '⚠️ Pod Husk Chaff (3.2%)', color: '#ef4444' },
-          { x: 120, y: 180, w: 85, h: 85, label: 'Broken Grain (2.1%)', color: '#f59e0b' }
-        ];
-        soyDefects.forEach(pt => {
-          ctx.strokeStyle = pt.color;
-          ctx.lineWidth = 2.5;
-          ctx.setLineDash([4, 4]);
-          ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-          ctx.setLineDash([]);
-
-          ctx.fillStyle = pt.color;
-          ctx.fillRect(pt.x, pt.y - 20, pt.w + 40, 18);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 10px Inter, sans-serif';
-          ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-        });
-      } else {
-        const points = [
-          { x: 50, y: 70, w: 75, h: 75, label: 'JS-335: 6.6mm (98%)' },
-          { x: 160, y: 55, w: 80, h: 80, label: 'JS-335: 6.4mm (99%)' },
-          { x: 280, y: 80, w: 70, h: 70, label: 'JS-335: 6.5mm (97%)' },
-          { x: 100, y: 190, w: 75, h: 75, label: 'JS-335: 6.7mm (96%)' },
-          { x: 230, y: 180, w: 80, h: 80, label: 'Chaff: 0.8% (PASS)', isChaff: true }
-        ];
-        points.forEach(pt => {
-          ctx.strokeStyle = pt.isChaff ? '#f59e0b' : '#10b981';
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-
-          ctx.fillStyle = pt.isChaff ? '#f59e0b' : 'rgba(16, 185, 129, 0.9)';
-          ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 10px Inter, sans-serif';
-          ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-        });
-      }
-      return;
-    }
-
-    // 5. ONION / DEFAULT HORTICULTURE
-    if (isDefective) {
-      const defects = [
-        { x: 80, y: 60, w: 120, h: 120, label: '⚠️ SPROUT DETECTED (+18mm)', defect: true },
-        { x: 220, y: 120, w: 110, h: 110, label: '⚠️ Blemish Mold / Rot (14%)', defect: true },
-        { x: 60, y: 190, w: 100, h: 100, label: 'Under-sized: 41mm', defect: false }
-      ];
-      defects.forEach(pt => {
-        ctx.strokeStyle = pt.defect ? '#ef4444' : '#f59e0b';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([4, 4]);
-        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = pt.defect ? 'rgba(239, 68, 68, 0.9)' : 'rgba(245, 158, 11, 0.9)';
-        ctx.fillRect(pt.x, pt.y - 22, pt.w + 20, 20);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 5, pt.y - 7);
-      });
-    } else {
-      const onions = [
-        { x: 60, y: 50, w: 110, h: 110, label: 'Globe A: 63mm (97%)' },
-        { x: 210, y: 70, w: 115, h: 115, label: 'Globe A: 62mm (96%)' },
-        { x: 130, y: 180, w: 105, h: 105, label: 'Globe A: 61mm (95%)' }
-      ];
-      const strokeColor = assayResult.grade_code === 'A' ? '#10b981' : '#3b82f6';
-      onions.forEach(pt => {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
-
-        ctx.fillStyle = strokeColor;
-        ctx.fillRect(pt.x, pt.y - 20, pt.w + 15, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
-      });
+    // Display a simple grade badge overlay on the analyzed image
+    if (assayResult) {
+      const gradeColor = assayResult.grade_code === 'C' ? '#ef4444' 
+        : assayResult.grade_code === 'B' ? '#3b82f6' : '#10b981';
+      
+      // Grade badge in top-right corner
+      ctx.fillStyle = gradeColor;
+      ctx.fillRect(canvas.width - 120, 8, 112, 28);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.fillText(`Grade ${assayResult.grade_code} — ${assayResult.confidence_score}%`, canvas.width - 115, 27);
     }
   }, [assayResult]);
 
@@ -672,7 +533,7 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                   }}
                 />
 
-                {/* Scanning Laser Line & Grid Overlay */}
+                {/* Scanning Overlay */}
                 {isScanning && (
                   <div style={{
                     position: 'absolute',
@@ -683,37 +544,19 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                     overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'space-between'
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}>
-                    {/* Animated Scanning Grid */}
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundImage: 'linear-gradient(to right, rgba(16, 185, 129, 0.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(16, 185, 129, 0.15) 1px, transparent 1px)',
-                      backgroundSize: '24px 24px'
-                    }} />
-
-                    {/* Animated Laser Sweep */}
+                    {/* Animated Sweep Line */}
                     <div style={{
                       width: '100%',
                       height: '3px',
                       background: 'linear-gradient(to right, transparent, #34d399, transparent)',
-                      boxShadow: '0 0 16px #10b981',
-                      margin: 'auto 0'
+                      boxShadow: '0 0 16px #10b981'
                     }} />
 
-                    {/* Laser corner crosshairs */}
-                    <div style={{ position: 'absolute', top: '8px', left: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
-                      [+] TENSOR_CV_ACTIVE
-                    </div>
-                    <div style={{ position: 'absolute', top: '8px', right: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
-                      FPS: 59.4
-                    </div>
-                    <div style={{ position: 'absolute', bottom: '8px', left: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
-                      FOV: 45° MACRO
-                    </div>
-                    <div style={{ position: 'absolute', bottom: '8px', right: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
-                      RES: 4K OPTIC
+                    <div style={{ position: 'absolute', bottom: '10px', left: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
+                      Analyzing...
                     </div>
                   </div>
                 )}
@@ -797,7 +640,39 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
 
             {/* Right: Assay Metrics & Grade Certificate */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {!assayResult && !isScanning && (
+              {/* Error State */}
+              {scanError && !isScanning && (
+                <div style={{
+                  minHeight: '200px',
+                  borderRadius: '12px',
+                  border: '2px solid #fca5a5',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  backgroundColor: '#fef2f2'
+                }}>
+                  <AlertTriangle size={36} color="#dc2626" style={{ marginBottom: '10px' }} />
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#991b1b', margin: '0 0 6px 0' }}>
+                    Analysis Failed
+                  </h4>
+                  <p style={{ fontSize: '0.74rem', color: '#b91c1c', maxWidth: '380px', margin: '0 0 14px 0' }}>
+                    {scanError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setScanError(null); triggerScan(); }}
+                    className="btn-gov-primary"
+                    style={{ fontSize: '0.78rem', padding: '6px 14px', backgroundColor: '#dc2626' }}
+                  >
+                    <RefreshCw size={14} /> Retry Scan
+                  </button>
+                </div>
+              )}
+
+              {!assayResult && !isScanning && !scanError && (
                 <div style={{
                   minHeight: '280px',
                   borderRadius: '12px',
@@ -825,10 +700,10 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                     🔬
                   </div>
                   <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
-                    Run Optical Quality Assay
+                    Run Quality Assay
                   </h4>
                   <p style={{ fontSize: '0.75rem', color: '#64748b', maxWidth: '320px', margin: '0 0 14px 0' }}>
-                    Select one of the sample presets above or upload produce photo to run instant computer-vision grading.
+                    Select a sample preset above or upload a produce photo to run real computer-vision quality grading.
                   </p>
                   <button
                     type="button"
@@ -836,7 +711,7 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                     className="btn-gov-primary"
                     style={{ fontSize: '0.78rem', padding: '6px 14px' }}
                   >
-                    <span>⚡</span> Start Instant AI Inspection
+                    <span>⚡</span> Start AI Inspection
                   </button>
                 </div>
               )}
