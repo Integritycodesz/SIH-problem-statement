@@ -35,6 +35,7 @@ import type {
   AIQualityAssayMetric,
   AIQualityAssayResult,
   StorageFacility,
+  StorageBooking,
   QualityAssay,
   CACPMSPBenchmark,
   BuyerMatch,
@@ -54,7 +55,9 @@ import type {
   GatePassStatus,
   ForwardContractOffer,
   ForwardContractStatus,
-  ForwardPricingSimulation
+  ForwardPricingSimulation,
+  ENWRPledgeLoanApplication,
+  APMCJFormRecord
 } from '../types';
 import {
   getCommodityRefractionSchedule,
@@ -100,6 +103,7 @@ export type {
   AIQualityAssayMetric,
   AIQualityAssayResult,
   StorageFacility,
+  StorageBooking,
   QualityAssay,
   CACPMSPBenchmark,
   BuyerMatch,
@@ -119,7 +123,9 @@ export type {
   GatePassStatus,
   ForwardContractOffer,
   ForwardContractStatus,
-  ForwardPricingSimulation
+  ForwardPricingSimulation,
+  ENWRPledgeLoanApplication,
+  APMCJFormRecord
 };
 
 
@@ -331,267 +337,9 @@ export function calculateMandiDistance(originDistrict: string, destMandiName: st
 // ============================================================================
 // GAP 4: VERIFIED MAHARASHTRA CORPORATE BUYERS POOL
 // ============================================================================
-export const VERIFIED_MAHARASHTRA_BUYERS: BuyerMatch[] = [
-  {
-    buyer_id: 201,
-    buyer_name: 'Vikramaditya Shinde',
-    company_name: 'ADM Agro Industries India Pvt. Ltd.',
-    district: 'Latur',
-    state: 'Maharashtra',
-    hub_name: 'Latur MIDC Agro Terminal Cluster',
-    distance_km: 32,
-    rating: 4.9,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-LAT-2022-4819',
-    standing_bid_price: 4920,
-    price_difference: 30,
-    commodity_preference: 'Soybean',
-    variety_preference: 'JS-335 / Yellow Seed',
-    moisture_spec_max: 11.0,
-    min_grade: 'Grade A',
-    match_score: 98,
-    match_reasons: [
-      '32 km from Latur APMC Yard',
-      'Standing bid ₹4,920/qtl (+₹30 above asking price)',
-      'Exact NABL moisture specification match (10.1% ≤ 11.0%)',
-      'Pre-funded RBI-regulated escrow account (₹25 Lakhs holding)'
-    ],
-    contact_phone: '+91 98220 48190',
-    prompt_pitch_text: 'Commercial soybean processing batch with guaranteed 50% advance escrow lock.'
-  },
-  {
-    buyer_id: 202,
-    buyer_name: 'Kailash K. Agrawal',
-    company_name: 'Kirti Dal & Solvent Extraction Mill',
-    district: 'Latur',
-    state: 'Maharashtra',
-    hub_name: 'Kirti Agro Processing Complex, Solapur Road',
-    distance_km: 48,
-    rating: 4.8,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-LAT-2021-9920',
-    standing_bid_price: 4910,
-    price_difference: 20,
-    commodity_preference: 'Soybean',
-    variety_preference: 'Yellow High-Oil',
-    moisture_spec_max: 11.5,
-    min_grade: 'Grade A',
-    match_score: 91,
-    match_reasons: [
-      '48 km transit corridor',
-      'Escrow Verified (₹50 Lakhs guarantee ledger)',
-      'Accepts Grade A & B with oil yield bonus',
-      'Instant electronic gate weighbridge clearance'
-    ],
-    contact_phone: '+91 98224 99201',
-    prompt_pitch_text: 'Direct mill gate delivery agreement with standard moisture allowance.'
-  },
-  {
-    buyer_id: 203,
-    buyer_name: 'Pravin Joshi (Cluster Lead)',
-    company_name: 'Sahyadri Agro Processing & Cold Hub',
-    district: 'Nashik',
-    state: 'Maharashtra',
-    hub_name: 'Dindori Agro Park Corridor, Nashik',
-    distance_km: 22,
-    rating: 4.9,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-NAS-2018-0912',
-    standing_bid_price: 2580,
-    price_difference: 30,
-    commodity_preference: 'Onion',
-    variety_preference: 'Garwa Export Quality',
-    moisture_spec_max: 11.5,
-    min_grade: 'Grade A',
-    match_score: 96,
-    match_reasons: [
-      '22 km from Lasalgaon APMC hub',
-      'Standing bid ₹2,580/qtl with export grading premium',
-      'Climate-controlled CA storage receiving terminal',
-      'MSAMB certified Fair Trade institutional aggregator'
-    ],
-    contact_phone: '+91 98221 09123',
-    prompt_pitch_text: 'Procuring for GCC export cargo & modern supermarket direct supply chains.'
-  },
-  {
-    buyer_id: 204,
-    buyer_name: 'Rajesh V. Mehta',
-    company_name: 'Reliance Retail Fresh Agro Sourcing',
-    district: 'Pune',
-    state: 'Maharashtra',
-    hub_name: 'Gultekdi APMC Central Aggregation Yard',
-    distance_km: 42,
-    rating: 4.8,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-PUN-2020-7714',
-    standing_bid_price: 2600,
-    price_difference: 50,
-    commodity_preference: 'Onion',
-    variety_preference: 'Grade A Red',
-    moisture_spec_max: 12.0,
-    min_grade: 'Grade A',
-    match_score: 93,
-    match_reasons: [
-      '42 km direct line haul corridor',
-      'Corporate buyer guarantee with T+24h settlement',
-      'Standing contract rate ₹2,600/qtl (+₹50 premium)',
-      'Direct farmgate transit reimbursement'
-    ],
-    contact_phone: '+91 98226 77140',
-    prompt_pitch_text: 'Immediate lot off-take for urban hypermarket distribution across Mumbai-Pune belt.'
-  },
-  {
-    buyer_id: 205,
-    buyer_name: 'Chandrashekhar Deshmukh',
-    company_name: 'Vidarbha Cotton Ginning & Exports Co.',
-    district: 'Amravati',
-    state: 'Maharashtra',
-    hub_name: 'Amravati Cotton Market Yard Corridor',
-    distance_km: 38,
-    rating: 4.9,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-AMR-2019-1145',
-    standing_bid_price: 7420,
-    price_difference: 170,
-    commodity_preference: 'Cotton',
-    variety_preference: 'DCH-32 / LRA-5166',
-    moisture_spec_max: 9.0,
-    min_grade: 'Grade A',
-    match_score: 97,
-    match_reasons: [
-      '38 km from Badnera Road depot',
-      'Standing bid ₹7,420/qtl (+₹299 over statutory MSP)',
-      'Immediate electronic staple length & micronaire testing',
-      'Full advance escrow funded in SBI nodal account'
-    ],
-    contact_phone: '+91 98229 11450',
-    prompt_pitch_text: 'Textile spinning mill requirements for 29mm+ staple fiber lots.'
-  },
-  {
-    buyer_id: 206,
-    buyer_name: 'Sunil G. Baheti',
-    company_name: 'Maharani Solvents & Grain Processors',
-    district: 'Chhatrapati Sambhajinagar',
-    state: 'Maharashtra',
-    hub_name: 'Shendra MIDC Terminal Gate',
-    distance_km: 64,
-    rating: 4.7,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-CSN-2021-6602',
-    standing_bid_price: 4880,
-    price_difference: -10,
-    commodity_preference: 'Soybean',
-    variety_preference: 'Yellow Standard',
-    moisture_spec_max: 11.2,
-    min_grade: 'Grade A',
-    match_score: 87,
-    match_reasons: [
-      '64 km transit distance via Samruddhi Corridor',
-      'Escrow pre-funded for multi-truck dispatches',
-      'Dedicated unloading bay for FPO consignments',
-      'Certified electronic weighbridge'
-    ],
-    contact_phone: '+91 98225 66021',
-    prompt_pitch_text: 'Solvent extraction processing; prompt digital gate weighment.'
-  },
-  {
-    buyer_id: 207,
-    buyer_name: 'Anand Kulkarni',
-    company_name: 'Baramati Agro Foods Ltd.',
-    district: 'Pune',
-    state: 'Maharashtra',
-    hub_name: 'Baramati Mega Food Park, Pune',
-    distance_km: 58,
-    rating: 4.7,
-    kyc_verified: true,
-    escrow_verified: true,
-    msamb_license: 'MSAMB-PUN-2019-3321',
-    standing_bid_price: 1880,
-    price_difference: 30,
-    commodity_preference: 'Tomato',
-    variety_preference: 'Hybrid Vaishali / Processing Red',
-    moisture_spec_max: 12.5,
-    min_grade: 'Grade A',
-    match_score: 94,
-    match_reasons: [
-      '58 km from central market',
-      'Bulk purchase for aseptic tomato puree plant',
-      'Fixed seasonal off-take rate with zero rejection clause',
-      'Direct escrow disbursement within 48 hours'
-    ],
-    contact_phone: '+91 98227 33219',
-    prompt_pitch_text: 'Industrial food processing procurement; prompt weighment at factory gate.'
-  }
-];
+export const VERIFIED_MAHARASHTRA_BUYERS: BuyerMatch[] = [];
 
-export const DEFAULT_VERIFIED_PRODUCE_LOTS: ProduceLot[] = [
-  {
-    id: 101,
-    farmer_id: 1,
-    farmer_name: 'Ramesh B. Patil',
-    farmer_phone: '+91 98220 12345',
-    mandi_id: 4,
-    mandi_name: 'Latur APMC Yard',
-    district: 'Latur',
-    state: 'Maharashtra',
-    commodity: 'Soybean',
-    variety: 'Malwa Yellow JS-335',
-    quantity_quintals: 120,
-    quality_grade: 'Grade A',
-    moisture_percent: 10.1,
-    base_price_per_quintal: 4890,
-    expected_delivery_days: 3,
-    description: 'High protein, golden yellow JS-335 soybean batch. NABL tested at 10.1% moisture, zero rancidity, solvent extraction certified.',
-    status: 'AVAILABLE',
-    created_at: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: 102,
-    farmer_id: 1,
-    farmer_name: 'Ramesh B. Patil',
-    farmer_phone: '+91 98220 12345',
-    mandi_id: 1,
-    mandi_name: 'Lasalgaon APMC',
-    district: 'Nashik',
-    state: 'Maharashtra',
-    commodity: 'Onion',
-    variety: 'Garwa Grade A (Export)',
-    quantity_quintals: 150,
-    quality_grade: 'Grade A',
-    moisture_percent: 10.4,
-    base_price_per_quintal: 2550,
-    expected_delivery_days: 2,
-    description: 'Cured Lasalgaon Garwa export quality onion lot. Thick outer skin layers, 55-70mm diameter, APEDA compliance verified.',
-    status: 'AVAILABLE',
-    created_at: new Date(Date.now() - 5 * 3600000).toISOString()
-  },
-  {
-    id: 103,
-    farmer_id: 1,
-    farmer_name: 'Ramesh B. Patil',
-    farmer_phone: '+91 98220 12345',
-    mandi_id: 6,
-    mandi_name: 'Amravati Cotton Market',
-    district: 'Amravati',
-    state: 'Maharashtra',
-    commodity: 'Cotton',
-    variety: 'DCH-32 Long Staple',
-    quantity_quintals: 100,
-    quality_grade: 'Grade A',
-    moisture_percent: 8.5,
-    base_price_per_quintal: 7250,
-    expected_delivery_days: 4,
-    description: 'Fine 31mm staple fiber cotton batch. Low trash content (<2.5%), certified by CIRCOT test laboratory.',
-    status: 'AVAILABLE',
-    created_at: new Date(Date.now() - 8 * 3600000).toISOString()
-  }
-];
+export const DEFAULT_VERIFIED_PRODUCE_LOTS: ProduceLot[] = [];
 
 // ============================================================================
 // Government Agmarknet (Data.gov.in) API Types & Cache
@@ -1811,17 +1559,10 @@ export const api = {
 
       const { data, error } = await query;
       if (error) throw error;
-      if (data && data.length > 0) return data as ProduceLot[];
-      
-      return DEFAULT_VERIFIED_PRODUCE_LOTS.filter(l => {
-        const matchCommodity = !commodity || commodity === 'All' || l.commodity.toLowerCase().includes(commodity.toLowerCase());
-        const matchGrade = !quality_grade || l.quality_grade.toLowerCase().includes(quality_grade.toLowerCase());
-        const matchFarmer = !farmer_id || l.farmer_id === farmer_id;
-        return matchCommodity && matchGrade && matchFarmer;
-      });
+      return (data as ProduceLot[]) || [];
     } catch (err) {
       console.error('[Supabase API] Failed to fetch produce lots:', err);
-      return DEFAULT_VERIFIED_PRODUCE_LOTS;
+      return [];
     }
   },
 
@@ -2584,6 +2325,7 @@ export const api = {
         let query = supabase
           .from('fpo_pools')
           .select('*, members:fpo_pool_members(*)')
+          .not('id', 'in', '(101,102,103,104)')
           .order('created_at', { ascending: false });
 
         if (district && district !== 'All') {
@@ -2594,15 +2336,22 @@ export const api = {
         }
 
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
-          return data as FPOPooledBatch[];
+        if (!error && data) {
+          const filtered = (data as FPOPooledBatch[]).filter(p =>
+            ![101, 102, 103, 104].includes(p.id) &&
+            !p.fpo_name.includes('Sahyadri') &&
+            !p.fpo_name.includes('Mahagrapes') &&
+            !p.fpo_name.includes('Marathwada Oilseed') &&
+            !p.fpo_name.includes('Vidarbha White Gold')
+          );
+          return filtered;
         }
       } catch (e) {
         console.warn('[FPO Pool API] Supabase query notice:', e);
       }
     }
 
-    // Baseline fallback if Supabase table is not yet created
+    // Baseline fallback if Supabase table is not yet created or empty
     const STORAGE_KEY = 'agroconnect_fpo_pools';
     let pools: FPOPooledBatch[] = [];
     try {
@@ -2610,115 +2359,23 @@ export const api = {
       if (saved) pools = JSON.parse(saved);
     } catch {}
 
-    if (!pools || pools.length === 0) {
-      pools = [
-        {
-          id: 101,
-          fpo_name: 'Sahyadri Farmers Producer Co. Ltd.',
-          fpo_registration_number: 'MH-NAS-FPO-2018-0912',
-          fpo_contact_person: 'Pravin Joshi (Cluster Lead)',
-          fpo_contact_phone: '+91 98220 88123',
-          district: 'Nashik',
-          state: 'Maharashtra',
-          central_hub_location: 'Dindori Agro-Processing & Cold Storage Cluster, Nashik',
-          commodity: 'Onion',
-          variety: 'Garwa Grade A (Export Quality)',
-          quality_grade: 'Grade A',
-          target_volume_quintals: 600,
-          collected_volume_quintals: 340,
-          unit_base_price: 2550,
-          status: 'OPEN_FOR_CONTRIBUTIONS',
-          expected_fulfillment_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-          description: 'Pooled collective batch from 12 smallholders in Dindori & Niphad talukas targeting direct supply to Mumbai wholesale retail chains with guaranteed minimum payment escrow.',
-          fpo_certified: true,
-          assay_certificate_id: 'QC-AGRO-2026-9812',
-          created_at: new Date().toISOString(),
-          members: [
-            { farmer_id: 1, farmer_name: 'Ramesh Patil', farmer_phone: '9822012345', district: 'Nashik', quantity_quintals: 120, grade: 'Grade A', payout_share_percent: 35.29, joined_at: new Date().toISOString() },
-            { farmer_id: 2, farmer_name: 'Sunita Deshmukh', farmer_phone: '9822023456', district: 'Nashik', quantity_quintals: 100, grade: 'Grade A', payout_share_percent: 29.41, joined_at: new Date().toISOString() },
-            { farmer_id: 3, farmer_name: 'Balasaheb Shinde', farmer_phone: '9822034567', district: 'Nashik', quantity_quintals: 120, grade: 'Grade A', payout_share_percent: 35.30, joined_at: new Date().toISOString() }
-          ]
-        },
-        {
-          id: 102,
-          fpo_name: 'Mahagrapes Farmers Producer Consortium',
-          fpo_registration_number: 'MH-PUN-FPO-2019-1420',
-          fpo_contact_person: 'Anand Kulkarni (Consortium Manager)',
-          fpo_contact_phone: '+91 98224 77112',
-          district: 'Pune',
-          state: 'Maharashtra',
-          central_hub_location: 'Baramati Mega Food Park Hub, Pune',
-          commodity: 'Tomato',
-          variety: 'Hybrid Vaishali (Firm Red)',
-          quality_grade: 'Grade A',
-          target_volume_quintals: 400,
-          collected_volume_quintals: 280,
-          unit_base_price: 1850,
-          status: 'OPEN_FOR_CONTRIBUTIONS',
-          expected_fulfillment_date: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
-          description: 'Consolidated collective lot aggregated across Baramati & Purandar FPO clusters for processing and table consumption with cold-chain transit.',
-          fpo_certified: true,
-          assay_certificate_id: 'QC-AGRO-2026-7734',
-          created_at: new Date().toISOString(),
-          members: [
-            { farmer_id: 2, farmer_name: 'Sunita Deshmukh', farmer_phone: '9822023456', district: 'Pune', quantity_quintals: 150, grade: 'Grade A', payout_share_percent: 53.57, joined_at: new Date().toISOString() },
-            { farmer_id: 5, farmer_name: 'Prakash Jadhav', farmer_phone: '9822056789', district: 'Pune', quantity_quintals: 130, grade: 'Grade A', payout_share_percent: 46.43, joined_at: new Date().toISOString() }
-          ]
-        },
-        {
-          id: 103,
-          fpo_name: 'Marathwada Oilseed & Pulse Kisan Producer Federation',
-          fpo_registration_number: 'MH-LAT-FPO-2021-3310',
-          fpo_contact_person: 'Dnyaneshwar Gaikwad (FPO Secretary)',
-          fpo_contact_phone: '+91 98220 45678',
-          district: 'Latur',
-          state: 'Maharashtra',
-          central_hub_location: 'Latur Pulse & Oilseed APMC Terminal Yard',
-          commodity: 'Soybean',
-          variety: 'Yellow (JS-335 High Oil Content)',
-          quality_grade: 'Grade A',
-          target_volume_quintals: 800,
-          collected_volume_quintals: 560,
-          unit_base_price: 5020,
-          status: 'OPEN_FOR_CONTRIBUTIONS',
-          expected_fulfillment_date: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
-          description: 'Institutional batch consolidated for edible oil extraction mills in Latur & Solapur districts. Assayed at 10.8% moisture and 19.4% oil content.',
-          fpo_certified: true,
-          assay_certificate_id: 'QC-AGRO-2026-4421',
-          created_at: new Date().toISOString(),
-          members: [
-            { farmer_id: 4, farmer_name: 'Dnyaneshwar Gaikwad', farmer_phone: '9822045678', district: 'Latur', quantity_quintals: 300, grade: 'Grade A', payout_share_percent: 53.57, joined_at: new Date().toISOString() },
-            { farmer_id: 7, farmer_name: 'Ganesh Pawar', farmer_phone: '9822078901', district: 'Latur', quantity_quintals: 260, grade: 'Grade A', payout_share_percent: 46.43, joined_at: new Date().toISOString() }
-          ]
-        },
-        {
-          id: 104,
-          fpo_name: 'Vidarbha White Gold Cotton Producer Co.',
-          fpo_registration_number: 'MH-AMR-FPO-2020-5512',
-          fpo_contact_person: 'Ganesh Pawar (Federation Chairman)',
-          fpo_contact_phone: '+91 98220 78901',
-          district: 'Amravati',
-          state: 'Maharashtra',
-          central_hub_location: 'Amravati Cotton Market Terminal Yard',
-          commodity: 'Cotton',
-          variety: 'Long Staple (DCH-32 31mm)',
-          quality_grade: 'Grade A',
-          target_volume_quintals: 500,
-          collected_volume_quintals: 420,
-          unit_base_price: 7450,
-          status: 'OPEN_FOR_CONTRIBUTIONS',
-          expected_fulfillment_date: new Date(Date.now() + 8 * 86400000).toISOString().split('T')[0],
-          description: 'Direct mill-grade long-staple cotton lot consolidated across 8 cooperative societies in Amravati & Yavatmal districts.',
-          fpo_certified: true,
-          assay_certificate_id: 'QC-AGRO-2026-1190',
-          created_at: new Date().toISOString(),
-          members: [
-            { farmer_id: 7, farmer_name: 'Ganesh Pawar', farmer_phone: '9822078901', district: 'Amravati', quantity_quintals: 250, grade: 'Grade A', payout_share_percent: 59.52, joined_at: new Date().toISOString() },
-            { farmer_id: 6, farmer_name: 'Santosh Borade', farmer_phone: '9822067890', district: 'Amravati', quantity_quintals: 170, grade: 'Grade A', payout_share_percent: 40.48, joined_at: new Date().toISOString() }
-          ]
-        }
-      ];
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pools)); } catch {}
+    // Scrub out any legacy pre-seeded mock institutional pools from local storage
+    if (pools && pools.length > 0) {
+      const cleaned = pools.filter(p =>
+        ![101, 102, 103, 104].includes(p.id) &&
+        !p.fpo_name.includes('Sahyadri') &&
+        !p.fpo_name.includes('Mahagrapes') &&
+        !p.fpo_name.includes('Marathwada Oilseed') &&
+        !p.fpo_name.includes('Vidarbha White Gold')
+      );
+      if (cleaned.length !== pools.length) {
+        pools = cleaned;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pools)); } catch {}
+      }
+    }
+
+    if (!pools) {
+      pools = [];
     }
 
     return pools.filter(p => {
@@ -2726,6 +2383,29 @@ export const api = {
       const matchComm = !commodity || commodity === 'All' || p.commodity.toLowerCase().includes(commodity.toLowerCase());
       return matchDist && matchComm;
     });
+  },
+
+  async deleteFPOPool(poolId: number): Promise<boolean> {
+    if (supabase) {
+      try {
+        await supabase.from('fpo_pool_members').delete().eq('pool_id', poolId);
+        await supabase.from('fpo_pools').delete().eq('id', poolId);
+      } catch (err) {
+        console.warn('[FPO Pool API] Supabase delete error:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_fpo_pools';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        let pools: FPOPooledBatch[] = JSON.parse(saved);
+        pools = pools.filter(p => p.id !== poolId);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pools));
+      }
+    } catch {}
+
+    return true;
   },
 
   async contributeLotToPool(
@@ -2901,6 +2581,78 @@ export const api = {
     });
   },
 
+  async bookStorageSpace(bookingData: {
+    facility_id: number;
+    facility_name: string;
+    facility_type: 'COLD_STORAGE' | 'WDRA_GODOWN' | 'APMC_WAREHOUSE' | 'CA_STORE';
+    farmer_id?: number;
+    farmer_name: string;
+    farmer_phone: string;
+    commodity: string;
+    quantity_quintals: number;
+    duration_days: number;
+    inward_date: string;
+    daily_tariff: number;
+    need_transport?: boolean;
+  }): Promise<StorageBooking> {
+    const rent = Math.round(bookingData.daily_tariff * bookingData.quantity_quintals * bookingData.duration_days);
+    const handlingFee = Math.round(bookingData.quantity_quintals * 15);
+    const totalAmount = rent + handlingFee;
+    const bookingId = `WDRA-${bookingData.facility_type === 'COLD_STORAGE' ? 'CS' : 'WH'}-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const booking: StorageBooking = {
+      id: bookingId,
+      facility_id: bookingData.facility_id,
+      facility_name: bookingData.facility_name,
+      facility_type: bookingData.facility_type,
+      farmer_id: bookingData.farmer_id || 1,
+      farmer_name: bookingData.farmer_name,
+      farmer_phone: bookingData.farmer_phone,
+      commodity: bookingData.commodity,
+      quantity_quintals: bookingData.quantity_quintals,
+      duration_days: bookingData.duration_days,
+      inward_date: bookingData.inward_date,
+      daily_tariff: bookingData.daily_tariff,
+      total_rent: rent,
+      handling_fee: handlingFee,
+      total_amount: totalAmount,
+      status: 'CONFIRMED',
+      need_transport: !!bookingData.need_transport,
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        await supabase.from('storage_bookings').insert([booking]);
+      } catch (e) {
+        console.warn('[Storage API] Supabase booking notice:', e);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_storage_bookings';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      const existing: StorageBooking[] = saved ? JSON.parse(saved) : [];
+      existing.unshift(booking);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    } catch {}
+
+    return booking;
+  },
+
+  async getStorageBookings(farmerId?: number): Promise<StorageBooking[]> {
+    const STORAGE_KEY = 'agroconnect_storage_bookings';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const bookings: StorageBooking[] = JSON.parse(saved);
+        if (farmerId) return bookings.filter(b => b.farmer_id === farmerId);
+        return bookings;
+      }
+    } catch {}
+    return [];
+  },
+
   // ============================================================================
   // KISAN VISION AI QUALITY ASSAYS (Supabase-backed)
   // ============================================================================
@@ -2947,187 +2699,136 @@ export const api = {
 
 
   // ============================================================================
-  // OPTION 2: KISAN VISION AI PHOTO QUALITY ASSAY ENGINE
+  // KISAN VISION AI PHOTO QUALITY ASSAY — REAL BACKEND CV SERVICE
   // ============================================================================
 
-  KISAN_VISION_PRESETS: {
-    'export_onion': {
-      assay_id: 'QC-AGRO-2026-9812',
-      timestamp: new Date().toISOString(),
-      commodity: 'Onion',
-      sample_name: 'Lasalgaon Garwa Export Batch #104',
-      predicted_grade: 'Grade A (Export / Modern Retail)',
-      grade_code: 'A',
-      confidence_score: 96.4,
-      average_diameter_mm: 62.4,
-      uniformity_score: 94.2,
-      blemish_percentage: 1.8,
-      estimated_moisture_percent: 10.4,
-      sprouting_or_damage_detected: false,
-      color_pigmentation_score: 92.8,
-      codex_standards_compliant: true,
-      suggested_price_multiplier: 1.12,
-      detected_count: 24,
-      image_url: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80',
-      metrics: [
-        { name: 'Average Diameter', measured_value: '62.4 mm', benchmark_range: '55.0 – 75.0 mm', status: 'OPTIMAL' },
-        { name: 'Size Uniformity Index', measured_value: '94.2%', benchmark_range: '> 85.0%', status: 'OPTIMAL' },
-        { name: 'Outer Skin Blemish', measured_value: '1.8%', benchmark_range: '< 3.0%', status: 'OPTIMAL' },
-        { name: 'Moisture Index', measured_value: '10.4%', benchmark_range: '10.0 – 11.5%', status: 'OPTIMAL' },
-        { name: 'Pigmentation (Redness)', measured_value: '92.8%', benchmark_range: '> 80.0%', status: 'OPTIMAL' },
-        { name: 'Sprouting / Rot Damage', measured_value: '0.0%', benchmark_range: '0.0%', status: 'PASS' }
-      ],
-      recommendations: [
-        'Meets strict APEDA export guidelines for Gulf & European reefer container shipments.',
-        'High solid content ensures excellent keeping quality (up to 45 days in ambient dry storage).',
-        'Eligible for 10% to 15% statutory premium above modal APMC spot benchmark.'
-      ]
-    },
-
-    'soybean_grade_a': {
-      assay_id: 'QC-AGRO-2026-8741',
-      timestamp: new Date().toISOString(),
-      commodity: 'Soybean',
-      sample_name: 'Malwa Yellow JS-335 Seed Lot',
-      predicted_grade: 'Grade A (Export / Modern Retail)',
-      grade_code: 'A',
-      confidence_score: 95.8,
-      average_diameter_mm: 6.5,
-      uniformity_score: 98.1,
-      blemish_percentage: 0.9,
-      estimated_moisture_percent: 10.1,
-      sprouting_or_damage_detected: false,
-      color_pigmentation_score: 96.0,
-      codex_standards_compliant: true,
-      suggested_price_multiplier: 1.08,
-      detected_count: 85,
-      image_url: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=600&auto=format&fit=crop&q=80',
-      metrics: [
-        { name: 'Grain Diameter', measured_value: '6.5 mm', benchmark_range: '6.0 – 7.2 mm', status: 'OPTIMAL' },
-        { name: 'Uniformity Ratio', measured_value: '98.1%', benchmark_range: '> 90.0%', status: 'OPTIMAL' },
-        { name: 'Foreign Matter / Husk', measured_value: '0.8%', benchmark_range: '< 1.5%', status: 'OPTIMAL' },
-        { name: 'Moisture Content', measured_value: '10.1%', benchmark_range: '< 11.0%', status: 'OPTIMAL' },
-        { name: 'Estimated Oil Yield', measured_value: '19.8%', benchmark_range: '> 18.0%', status: 'OPTIMAL' },
-        { name: 'Mold / Insect Attack', measured_value: '0.0%', benchmark_range: '0.0%', status: 'PASS' }
-      ],
-      recommendations: [
-        'Certified high-protein batch ideal for commercial solvent extraction & premium soymilk production.',
-        'Moisture safely below 11% threshold; zero rancidity or fungal spore development risk.',
-        'Qualifies for institutional purchase at full CACP MSP + solvent extraction bonus.'
-      ]
-    },
-
-    'domestic_onion': {
-      assay_id: 'QC-AGRO-2026-6419',
-      timestamp: new Date().toISOString(),
-      commodity: 'Onion',
-      sample_name: 'Maharashtra Medium Garwa Mandi Lot',
-      predicted_grade: 'Grade B (Domestic APMC Grade)',
-      grade_code: 'B',
-      confidence_score: 91.2,
-      average_diameter_mm: 48.2,
-      uniformity_score: 82.5,
-      blemish_percentage: 4.8,
-      estimated_moisture_percent: 11.8,
-      sprouting_or_damage_detected: false,
-      color_pigmentation_score: 84.0,
-      codex_standards_compliant: true,
-      suggested_price_multiplier: 1.00,
-      detected_count: 22,
-      image_url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80',
-      metrics: [
-        { name: 'Average Diameter', measured_value: '48.2 mm', benchmark_range: '45.0 – 60.0 mm', status: 'PASS' },
-        { name: 'Size Uniformity Index', measured_value: '82.5%', benchmark_range: '> 80.0%', status: 'PASS' },
-        { name: 'Outer Skin Peeling', measured_value: '4.8%', benchmark_range: '< 6.0%', status: 'PASS' },
-        { name: 'Moisture Index', measured_value: '11.8%', benchmark_range: '10.5 – 12.5%', status: 'PASS' },
-        { name: 'Color Rating', measured_value: '84.0%', benchmark_range: '> 75.0%', status: 'PASS' },
-        { name: 'Sprouting / Rot', measured_value: '0.0%', benchmark_range: '0.0%', status: 'PASS' }
-      ],
-      recommendations: [
-        'Ideal for domestic APMC auction and wholesale state distribution (Vashi, Pune, Surat).',
-        'Dry skin layers intact; suitable for 15–20 days shelf storage in ventilated crates.',
-        'Trades at standard market modal equilibrium.'
-      ]
-    },
-
-    'sprouted_defective': {
-      assay_id: 'QC-AGRO-2026-3105',
-      timestamp: new Date().toISOString(),
-      commodity: 'Onion',
-      sample_name: 'Rain-Affected Unsorted Stored Lot',
-      predicted_grade: 'Grade C (Industrial / Processing)',
-      grade_code: 'C',
-      confidence_score: 97.2,
-      average_diameter_mm: 41.5,
-      uniformity_score: 64.0,
-      blemish_percentage: 14.8,
-      estimated_moisture_percent: 14.6,
-      sprouting_or_damage_detected: true,
-      color_pigmentation_score: 68.0,
-      codex_standards_compliant: false,
-      suggested_price_multiplier: 0.78,
-      detected_count: 19,
-      image_url: 'https://images.unsplash.com/photo-1508747703725-719777637510?w=600&auto=format&fit=crop&q=80',
-      metrics: [
-        { name: 'Average Diameter', measured_value: '41.5 mm', benchmark_range: '> 45.0 mm', status: 'DEFICIENT' },
-        { name: 'Size Uniformity Index', measured_value: '64.0%', benchmark_range: '> 80.0%', status: 'DEFICIENT' },
-        { name: 'Blemish / Mold Damage', measured_value: '14.8%', benchmark_range: '< 5.0%', status: 'DEFICIENT' },
-        { name: 'Moisture Index', measured_value: '14.6%', benchmark_range: '< 12.0%', status: 'DEFICIENT' },
-        { name: 'Sprout Emergence', measured_value: '18.4% of lot', benchmark_range: '0.0%', status: 'DEFICIENT' },
-        { name: 'Color Deterioration', measured_value: '68.0%', benchmark_range: '> 75.0%', status: 'DEFICIENT' }
-      ],
-      recommendations: [
-        '⚠️ CRITICAL WARNING: High moisture and active sprouting detected.',
-        'Not recommended for long-distance transport or retail fresh consumption.',
-        'Recommended immediate diversion to onion paste, dehydration, or vinegar pickling processing plants at 22% industrial discount.'
-      ]
-    }
-  },
-
+  /**
+   * Sends image to the real backend Computer Vision service for actual
+   * pixel-level analysis (segmentation, morphometry, pigmentation, defect
+   * detection, moisture estimation, statutory grading).
+   *
+   * Accepts either:
+   *  - A base64 data-URL (from file upload or camera capture)
+   *  - A preset thumbnail URL (fetched as blob and forwarded to the backend)
+   */
   async analyzeProduceQuality(
     imageUriOrPresetId: string,
     commodity: string = 'Onion'
   ): Promise<AIQualityAssayResult> {
-    // Artificial latency for authentic neural network inference feel
-    await new Promise(r => setTimeout(r, 1400));
+    const FORECAST_SERVICE_URL =
+      import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
 
-    const presets = (this as any).KISAN_VISION_PRESETS as Record<string, AIQualityAssayResult>;
+    let imageBase64: string | null = null;
 
-    // Check if preset key matches
-    if (presets[imageUriOrPresetId]) {
-      const preset = presets[imageUriOrPresetId];
-      return {
-        ...preset,
-        assay_id: `QC-AGRO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        timestamp: new Date().toISOString()
+    // Case 1: Custom upload — already a base64 data URL
+    if (imageUriOrPresetId.startsWith('data:')) {
+      imageBase64 = imageUriOrPresetId;
+    }
+    // Case 2: Preset thumbnail URL or any HTTP image URL — fetch and convert to base64
+    else if (imageUriOrPresetId.startsWith('http')) {
+      try {
+        const imgResp = await fetch(imageUriOrPresetId);
+        const blob = await imgResp.blob();
+        imageBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (fetchErr) {
+        console.error('[Kisan Vision] Failed to fetch preset image:', fetchErr);
+        throw new Error('Failed to fetch produce image for analysis. Please upload a photo directly.');
+      }
+    }
+    // Case 3: Preset ID string — resolve to its thumbnail URL, then fetch
+    else {
+      // Map preset IDs to their thumbnail URLs for fetching
+      const presetThumbnails: Record<string, { url: string; commodity: string }> = {
+        'export_onion': { url: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80', commodity: 'Onion' },
+        'soybean_grade_a': { url: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=600&auto=format&fit=crop&q=80', commodity: 'Soybean' },
+        'cotton_grade_faq': { url: 'https://images.unsplash.com/photo-1606041008023-472dfb5e530f?w=600&auto=format&fit=crop&q=80', commodity: 'Cotton' },
+        'tomato_grade_a': { url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80', commodity: 'Tomato' },
+        'wheat_grade_a': { url: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=600&auto=format&fit=crop&q=80', commodity: 'Wheat' },
+        'domestic_onion': { url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80', commodity: 'Onion' },
+        'soybean_high_moisture': { url: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=600&auto=format&fit=crop&q=80', commodity: 'Soybean' },
+        'sprouted_defective': { url: 'https://images.unsplash.com/photo-1508747703725-719777637510?w=600&auto=format&fit=crop&q=80', commodity: 'Onion' },
       };
+
+      const preset = presetThumbnails[imageUriOrPresetId];
+      if (preset) {
+        commodity = commodity || preset.commodity;
+        try {
+          const imgResp = await fetch(preset.url);
+          const blob = await imgResp.blob();
+          imageBase64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        } catch (fetchErr) {
+          console.error('[Kisan Vision] Failed to fetch preset image:', fetchErr);
+          throw new Error('Failed to fetch sample produce image. Please upload a photo directly.');
+        }
+      } else {
+        throw new Error(`Unknown image source: "${imageUriOrPresetId}". Please upload a produce photo.`);
+      }
     }
 
-    // Dynamic analysis for custom uploads or commodity
-    const isGradeA = !imageUriOrPresetId.toLowerCase().includes('sprout') && !imageUriOrPresetId.toLowerCase().includes('defect');
-    const isSoybean = commodity.toLowerCase().includes('soy') || commodity.toLowerCase().includes('soya');
-
-    if (isSoybean) {
-      return {
-        ...presets['soybean_grade_a'],
-        assay_id: `QC-AGRO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        timestamp: new Date().toISOString()
-      };
+    if (!imageBase64) {
+      throw new Error('No image data available for analysis. Please upload a produce photo.');
     }
 
-    if (isGradeA) {
-      return {
-        ...presets['export_onion'],
-        assay_id: `QC-AGRO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        timestamp: new Date().toISOString()
-      };
-    }
+    // Send to the real backend CV service
+    try {
+      const response = await fetch(`${FORECAST_SERVICE_URL}/api/assay/analyze-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_base64: imageBase64,
+          commodity: commodity
+        })
+      });
 
-    return {
-      ...presets['domestic_onion'],
-      assay_id: `QC-AGRO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      timestamp: new Date().toISOString()
-    };
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`CV service returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      // Map backend response to AIQualityAssayResult interface
+      return {
+        assay_id: result.assay_id || `QC-AGRO-${Date.now()}`,
+        timestamp: result.timestamp || new Date().toISOString(),
+        commodity: result.commodity || commodity,
+        sample_name: result.sample_name || `${commodity} Specimen`,
+        predicted_grade: result.predicted_grade || 'Unknown',
+        grade_code: result.grade_code || 'B',
+        confidence_score: result.confidence_score || 0,
+        average_diameter_mm: result.average_diameter_mm || 0,
+        uniformity_score: result.uniformity_score || 0,
+        blemish_percentage: result.blemish_percentage || 0,
+        estimated_moisture_percent: result.estimated_moisture_percent || 0,
+        foreign_matter_percent: result.foreign_matter_percent,
+        broken_grain_percent: result.broken_grain_percent,
+        apmc_grade_classification: result.apmc_grade_classification,
+        sprouting_or_damage_detected: result.sprouting_or_damage_detected || false,
+        color_pigmentation_score: result.color_pigmentation_score || 0,
+        codex_standards_compliant: result.codex_standards_compliant || false,
+        suggested_price_multiplier: result.suggested_price_multiplier || 1.0,
+        detected_count: result.detected_count || 0,
+        metrics: result.metrics || [],
+        recommendations: result.recommendations || [],
+        image_url: result.image_url || undefined
+      } as AIQualityAssayResult;
+    } catch (err: any) {
+      if (err.message?.includes('CV service returned')) {
+        throw err;
+      }
+      console.error('[Kisan Vision] Backend CV service unreachable:', err);
+      throw new Error(
+        'Quality Assay service is not available. Please ensure the backend service is running (forecast_service on port 8000).'
+      );
+    }
   },
 
   // ============================================================================
@@ -3273,7 +2974,10 @@ export const api = {
     pitchedPrice: number, 
     customMessage?: string
   ): Promise<{ rfq: RFQ; notifId: string }> {
-    const lot = (await this.getLots()).find(l => l.id === lotId) || DEFAULT_VERIFIED_PRODUCE_LOTS[0];
+    const lot = (await this.getLots()).find(l => l.id === lotId);
+    if (!lot) {
+      throw new Error(`Harvest Lot #${lotId} not found.`);
+    }
     const buyer = VERIFIED_MAHARASHTRA_BUYERS.find(b => b.buyer_id === buyerId) || {
       buyer_id: buyerId,
       buyer_name: 'Corporate Buyer Desk',
@@ -3335,7 +3039,7 @@ export const api = {
       vehicle_type: data.vehicle_type || '10-Ton Eicher Pro',
       driver_name: data.driver_name || 'Tukaram Gaikwad',
       driver_phone: data.driver_phone || '+91 98224 88210',
-      farmer_name: data.farmer_name || 'Ramesh B. Patil',
+      farmer_name: data.farmer_name || 'Registered Farmer',
       buyer_name: data.buyer_name || 'Institutional Buyer',
       pickup: data.pickup_location || 'Farmgate APMC Hub',
       delivery: data.delivery_location || 'Buyer Processing Silo',
@@ -3366,7 +3070,7 @@ export const api = {
       status: 'BOOKED' as LogisticsStatus,
       security_hash: securityHash,
       qr_payload_json: qrPayload,
-      farmer_name: data.farmer_name || 'Ramesh B. Patil',
+      farmer_name: data.farmer_name || 'Registered Farmer',
       buyer_name: data.buyer_name || 'ADM Agro Industries',
       commodity: data.commodity || 'Soybean',
       created_at: new Date().toISOString()
@@ -3475,7 +3179,7 @@ export const api = {
       dispatched_at: new Date(Date.now() - 3600000).toISOString(),
       security_hash: 'SHA256:a9f82bc194d801efc2',
       created_at: new Date(Date.now() - 7200000).toISOString(),
-      farmer_name: 'Ramesh B. Patil',
+      farmer_name: 'Registered Farmer',
       buyer_name: 'ADM Agro Industries',
       commodity: 'Soybean'
     };
@@ -3713,140 +3417,7 @@ export const api = {
     }
   } as Record<number, BuyerReliabilityScorecard>,
 
-  DEFAULT_BUYER_DEMANDS: [
-    {
-      id: 1,
-      buyer_id: 3,
-      buyer_name: 'Prakash Rao (Chief Commercial Officer)',
-      company_name: 'Nagpur Oil & Solvent Mills Pvt. Ltd.',
-      company_type: 'OIL_MILL',
-      commodity: 'Soybean',
-      variety: 'Yellow JS-335 (High Oil Content)',
-      required_quantity_quintals: 1200,
-      fulfilled_quantity_quintals: 450,
-      target_price_per_quintal: 5080,
-      quality_grade_required: 'Grade A',
-      max_moisture_percent: 10.0,
-      delivery_hub: 'Nagpur APMC Central Milling Hub',
-      delivery_deadline: 'Sep 25, 2026',
-      delivery_deadline_days: 14,
-      escrow_prefunded: true,
-      status: 'PARTIALLY_FULFILLED',
-      notes: 'Direct crushing line delivery. 100% advance secured in SBI Nodal Escrow Node. Gate weighment within 90 minutes.',
-      created_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    },
-    {
-      id: 2,
-      buyer_id: 4,
-      buyer_name: 'Rajendra Joshi (Central Sourcing Head)',
-      company_name: 'Adani Wilmar Agro-Processing Ltd',
-      company_type: 'OIL_MILL',
-      commodity: 'Soybean',
-      variety: 'Malwa Yellow FAQ Seed Lot',
-      required_quantity_quintals: 2500,
-      fulfilled_quantity_quintals: 800,
-      target_price_per_quintal: 5150,
-      quality_grade_required: 'Grade A+',
-      max_moisture_percent: 9.0,
-      delivery_hub: 'Akola Processing Cluster Hub',
-      delivery_deadline: 'Sep 28, 2026',
-      delivery_deadline_days: 17,
-      escrow_prefunded: true,
-      status: 'PARTIALLY_FULFILLED',
-      notes: 'Export solvent meal requirement. Minimum protein assay 38% required. Instant NABL assay at hub gate.',
-      created_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    },
-    {
-      id: 3,
-      buyer_id: 5,
-      buyer_name: 'Sunil Agrawal (Raw Material Sourcing)',
-      company_name: 'Haldiram Foods International Ltd',
-      company_type: 'FOOD_PROCESSOR',
-      commodity: 'Gram',
-      variety: 'FAQ Bold Desi Chana',
-      required_quantity_quintals: 400,
-      fulfilled_quantity_quintals: 120,
-      target_price_per_quintal: 5600,
-      quality_grade_required: 'Grade A',
-      max_moisture_percent: 10.0,
-      delivery_hub: 'Kalamna Industrial Area, Nagpur',
-      delivery_deadline: 'Oct 02, 2026',
-      delivery_deadline_days: 21,
-      escrow_prefunded: true,
-      status: 'PARTIALLY_FULFILLED',
-      notes: 'Procurement for premium Besan and Namkeen roasting line. Zero weevil infestation and uniform kernel size required.',
-      created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    },
-    {
-      id: 4,
-      buyer_id: 2,
-      buyer_name: 'Amit Sharma (Procurement Manager)',
-      company_name: 'ITC Agri-Business Division (Aashirvaad)',
-      company_type: 'AGRI_CONGLOMERATE',
-      commodity: 'Wheat',
-      variety: 'Sharbati / Lokwan (Heavy Amber Grain)',
-      required_quantity_quintals: 800,
-      fulfilled_quantity_quintals: 250,
-      target_price_per_quintal: 2600,
-      quality_grade_required: 'Grade A+',
-      max_moisture_percent: 11.0,
-      delivery_hub: 'Narayangaon Hub, Pune District',
-      delivery_deadline: 'Sep 30, 2026',
-      delivery_deadline_days: 19,
-      escrow_prefunded: true,
-      status: 'PARTIALLY_FULFILLED',
-      notes: 'Aashirvaad chakki atta milling lot. High gluten and amber luster specified. Certified electronic weighbridge receipt.',
-      created_at: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    },
-    {
-      id: 5,
-      buyer_id: 6,
-      buyer_name: 'Vilas Shinde (Managing Director)',
-      company_name: 'Sahyadri Agro-Processing & Exports (Nashik)',
-      company_type: 'EXPORTER',
-      commodity: 'Onion',
-      variety: 'Garwa Grade A (55mm+ Export Size)',
-      required_quantity_quintals: 1500,
-      fulfilled_quantity_quintals: 650,
-      target_price_per_quintal: 2650,
-      quality_grade_required: 'Grade A (Export)',
-      max_moisture_percent: 11.5,
-      delivery_hub: 'Dindori Agro Park Corridor, Nashik',
-      delivery_deadline: 'Sep 24, 2026',
-      delivery_deadline_days: 13,
-      escrow_prefunded: true,
-      status: 'PARTIALLY_FULFILLED',
-      notes: 'Direct export container packing. CA cold storage docking available. Instant MSAMB e-settlement.',
-      created_at: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    },
-    {
-      id: 6,
-      buyer_id: 3,
-      buyer_name: 'Prakash Rao',
-      company_name: 'Nagpur Oil & Solvent Mills Pvt. Ltd.',
-      company_type: 'OIL_MILL',
-      commodity: 'Cotton',
-      variety: 'Medium Staple LRA-5166 (28mm)',
-      required_quantity_quintals: 600,
-      fulfilled_quantity_quintals: 0,
-      target_price_per_quintal: 7400,
-      quality_grade_required: 'Grade A',
-      max_moisture_percent: 8.5,
-      delivery_hub: 'Hingna MIDC Ginning Terminal, Nagpur',
-      delivery_deadline: 'Oct 05, 2026',
-      delivery_deadline_days: 24,
-      escrow_prefunded: true,
-      status: 'OPEN',
-      notes: 'Ginning & oil crushing lot. Strict trash deduction per statutory MSAMB schedule.',
-      created_at: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
-      credibility_scorecard: null as any
-    }
-  ] as BuyerDemand[],
+  DEFAULT_BUYER_DEMANDS: [] as BuyerDemand[],
 
   async getBuyerScorecard(buyerIdOrName: number | string): Promise<BuyerReliabilityScorecard> {
     if (supabase) {
@@ -4010,8 +3581,6 @@ export const api = {
   },
 
   async getBuyerDemands(filters?: { commodity?: string; hub?: string; status?: string }): Promise<BuyerDemand[]> {
-    const STORAGE_KEY = 'agroconnect_buyer_demands';
-
     if (supabase) {
       try {
         let query = supabase.from('buyer_demands').select('*').order('created_at', { ascending: false });
@@ -4025,7 +3594,7 @@ export const api = {
           query = query.eq('status', filters.status);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           const demandsWithScorecards: BuyerDemand[] = data.map((d: any) => ({
             ...d,
             required_quantity_quintals: Number(d.required_quantity_quintals),
@@ -4037,7 +3606,7 @@ export const api = {
             credibility_scorecard: (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || {
               buyer_id: d.buyer_id,
               company_name: d.company_name,
-              company_type: d.company_type,
+              company_type: d.company_type || 'FOOD_PROCESSOR',
               msamb_license_number: 'MH-PUN-TR-2024-8891',
               license_validity: 'Active MSAMB 2028',
               overall_reliability_score: 99.2,
@@ -4055,8 +3624,8 @@ export const api = {
               audited_year: 'FY 2025-26',
               monthly_target_quintals: 5000.0,
               monthly_procured_quintals: 3450.0,
-              target_commodity: 'Soybean',
-              apmc_benchmark_price_per_qtl: 5220.0
+              target_commodity: d.commodity || 'Soybean',
+              apmc_benchmark_price_per_qtl: Number(d.target_price_per_quintal) || 5220.0
             }
           }));
           return demandsWithScorecards;
@@ -4066,64 +3635,15 @@ export const api = {
       }
     }
 
-    let demands: BuyerDemand[] = [];
+    const STORAGE_KEY = 'agroconnect_buyer_demands';
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) demands = JSON.parse(stored);
+      if (stored) {
+        return JSON.parse(stored);
+      }
     } catch {}
 
-    if (!demands || demands.length === 0) {
-      demands = (this as any).DEFAULT_BUYER_DEMANDS.map((d: BuyerDemand) => ({
-        ...d,
-        credibility_scorecard: (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || null
-      }));
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(demands));
-      } catch {}
-    }
-
-    demands = demands.map(d => ({
-      ...d,
-      refraction_schedule: d.refraction_schedule || getCommodityRefractionSchedule(d.commodity),
-      credibility_scorecard: d.credibility_scorecard || (this as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id] || {
-        buyer_id: d.buyer_id,
-        company_name: d.company_name,
-        company_type: d.company_type,
-        msamb_license_number: 'MH-PUN-TR-2024-8891',
-        license_validity: 'Active MSAMB 2028',
-        overall_reliability_score: 99.2,
-        credit_tier: 'AAA_PLATINUM',
-        escrow_on_time_rate: 99.2,
-        avg_payment_release_hours: 4.2,
-        total_deals_completed: 48,
-        total_volume_cleared_quintals: 42500,
-        total_escrow_disbursed_lakhs: 216.5,
-        unresolved_disputes_count: 0,
-        dispute_resolution_rate_pct: 100.0,
-        default_rate_pct: 0.0,
-        bank_nodal_partner: 'State Bank of India',
-        apmc_verified_depots: ['Pune', 'Nashik', 'Nagpur'],
-        audited_year: 'FY 2025-26',
-        monthly_target_quintals: 5000.0,
-        monthly_procured_quintals: 3450.0,
-        target_commodity: 'Soybean',
-        apmc_benchmark_price_per_qtl: 5220.0
-      }
-    }));
-
-    if (filters) {
-      if (filters.commodity && filters.commodity !== 'All') {
-        demands = demands.filter(d => d.commodity.toLowerCase().includes(filters.commodity!.toLowerCase()));
-      }
-      if (filters.hub && filters.hub !== 'All') {
-        demands = demands.filter(d => d.delivery_hub.toLowerCase().includes(filters.hub!.toLowerCase()));
-      }
-      if (filters.status && filters.status !== 'All') {
-        demands = demands.filter(d => d.status === filters.status);
-      }
-    }
-
-    return demands;
+    return [];
   },
 
   async createBuyerDemand(demandData: Partial<BuyerDemand>): Promise<BuyerDemand> {
@@ -4428,12 +3948,133 @@ export const api = {
   // PHASE 4: DIGITAL GATE PASS & WEIGHBRIDGE
   // ==========================================
 
-  getDigitalGatePasses(): DigitalGatePass[] {
+  async getDigitalGatePasses(): Promise<DigitalGatePass[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('digital_gate_passes')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            ...d,
+            qr_code_token: d.qr_code_payload || d.qr_code_token || d.id
+          })) as DigitalGatePass[];
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to fetch digital gate passes:', err);
+      }
+    }
     try {
       const stored = localStorage.getItem('agroconnect_gate_passes');
       if (stored) return JSON.parse(stored);
     } catch {}
     return INITIAL_GATE_PASSES;
+  },
+
+  async createDigitalGatePass(passData: Partial<DigitalGatePass>): Promise<DigitalGatePass> {
+    const id = passData.id || `gp-${Date.now().toString().slice(-6)}`;
+    const passNumber = passData.pass_number || this.generateGatePassId();
+    const payload = {
+      id,
+      pass_number: passNumber,
+      contract_id: passData.contract_id || null,
+      contract_number: passData.contract_number || `AGC-MH-${Date.now().toString().slice(-6)}`,
+      truck_number: passData.truck_number || 'MH-15-AB-0000',
+      driver_name: passData.driver_name || 'Driver',
+      driver_phone: passData.driver_phone || '',
+      carrier_name: passData.carrier_name || 'Maharashtra Agri-Logistics Corp',
+      commodity: passData.commodity || 'Soybean',
+      variety: passData.variety || 'Standard Grade',
+      farmer_id: passData.farmer_id || 1,
+      farmer_name: passData.farmer_name || 'Farmer',
+      farmer_phone: passData.farmer_phone || '',
+      buyer_id: passData.buyer_id || 2,
+      buyer_name: passData.buyer_name || 'Procurement Buyer',
+      destination_mill: passData.destination_mill || 'APMC Yard',
+      destination_district: passData.destination_district || 'Nashik',
+      estimated_quantity_quintals: Number(passData.estimated_quantity_quintals) || 100,
+      gross_weight_kg: Number(passData.gross_weight_kg) || 0,
+      tare_weight_kg: Number(passData.tare_weight_kg) || 0,
+      net_produce_kg: Number(passData.net_produce_kg) || 0,
+      net_produce_quintals: Number(passData.net_produce_quintals) || 0,
+      tested_moisture_pct: Number(passData.tested_moisture_pct) || 10,
+      tested_foreign_matter_pct: Number(passData.tested_foreign_matter_pct) || 1,
+      tested_damaged_pct: Number(passData.tested_damaged_pct) || 1,
+      base_price_per_quintal: Number(passData.base_price_per_quintal) || 5000,
+      refraction_deduction_amount: Number(passData.refraction_deduction_amount) || 0,
+      net_payable_amount: Number(passData.net_payable_amount) || 0,
+      escrow_advance_deducted: Number(passData.escrow_advance_deducted) || 0,
+      final_settlement_released: Number(passData.final_settlement_released) || 0,
+      status: passData.status || 'ISSUED',
+      weighbridge_operator: passData.weighbridge_operator || 'APMC Weighbridge Operator',
+      qr_code_payload: passData.qr_code_token || `MSAMB-GP-${passNumber}`,
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('digital_gate_passes')
+          .insert([payload])
+          .select()
+          .single();
+        if (!error && data) {
+          return {
+            ...data,
+            qr_code_token: data.qr_code_payload || data.qr_code_token,
+            security_hash: 'sha256-' + data.id,
+            weighbridge_terminal_id: 'WB-SCALE-01'
+          } as unknown as DigitalGatePass;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to create gate pass in database:', err);
+      }
+    }
+
+    try {
+      const existing = await this.getDigitalGatePasses();
+      const updated = [payload as any, ...existing];
+      localStorage.setItem('agroconnect_gate_passes', JSON.stringify(updated));
+    } catch {}
+
+    return {
+      ...payload,
+      qr_code_token: payload.qr_code_payload,
+      security_hash: 'sha256-' + id,
+      weighbridge_terminal_id: 'WB-SCALE-01'
+    } as unknown as DigitalGatePass;
+  },
+
+  async updateDigitalGatePass(id: string, updates: Partial<DigitalGatePass>): Promise<DigitalGatePass | null> {
+    if (supabase) {
+      try {
+        const dbUpdates: any = { ...updates };
+        if (updates.qr_code_token) {
+          dbUpdates.qr_code_payload = updates.qr_code_token;
+          delete dbUpdates.qr_code_token;
+        }
+        delete dbUpdates.security_hash;
+        delete dbUpdates.weighbridge_terminal_id;
+        const { data, error } = await supabase
+          .from('digital_gate_passes')
+          .update(dbUpdates)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) {
+          return {
+            ...data,
+            qr_code_token: data.qr_code_payload || data.qr_code_token,
+            security_hash: 'sha256-' + data.id,
+            weighbridge_terminal_id: 'WB-SCALE-01'
+          } as unknown as DigitalGatePass;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to update gate pass in Supabase:', err);
+      }
+    }
+    return null;
   },
 
   generateGatePassId(millCode?: string): string {
@@ -4466,12 +4107,94 @@ export const api = {
   // PHASE 5: PRE-HARVEST FORWARD CONTRACTS
   // ==========================================
 
-  getForwardContractOffers(): ForwardContractOffer[] {
+  async getForwardContractOffers(): Promise<ForwardContractOffer[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('forward_contract_offers')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data.map((d: any) => ({
+            ...d,
+            target_volume_quintals: Number(d.target_volume_quintals),
+            committed_volume_quintals: Number(d.committed_volume_quintals),
+            pre_harvest_contract_price: Number(d.pre_harvest_contract_price),
+            cacp_msp_floor_price: Number(d.cacp_msp_floor_price),
+            upside_sharing_percent: Number(d.upside_sharing_percent),
+            sowing_advance_percent: Number(d.sowing_advance_percent),
+            sowing_advance_per_quintal: Number(d.sowing_advance_per_quintal),
+            participating_farmers_count: Number(d.participating_farmers_count)
+          })) as ForwardContractOffer[];
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to fetch forward contracts from database:', err);
+      }
+    }
     try {
       const stored = localStorage.getItem('agroconnect_forward_contracts');
       if (stored) return JSON.parse(stored);
     } catch {}
     return INITIAL_FORWARD_CONTRACT_OFFERS;
+  },
+
+  async createForwardContractOffer(offerData: Partial<ForwardContractOffer>): Promise<ForwardContractOffer> {
+    const id = offerData.id || `fwd-${Date.now().toString().slice(-6)}`;
+    const offerCode = offerData.offer_code || `AGC-FWD-2026-${(offerData.commodity || 'AGRI').slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    const payload = {
+      id,
+      offer_code: offerCode,
+      buyer_id: offerData.buyer_id || 3,
+      buyer_name: offerData.buyer_name || 'Institutional Processor',
+      company_name: offerData.company_name || 'Agri Processing Ltd',
+      commodity: offerData.commodity || 'Soybean',
+      variety: offerData.variety || 'Standard Processing Grade',
+      season: offerData.season || 'KHARIF_2026',
+      target_volume_quintals: Number(offerData.target_volume_quintals) || 2000,
+      committed_volume_quintals: Number(offerData.committed_volume_quintals) || 0,
+      pre_harvest_contract_price: Number(offerData.pre_harvest_contract_price) || 5000,
+      cacp_msp_floor_price: Number(offerData.cacp_msp_floor_price) || 4892,
+      upside_sharing_percent: Number(offerData.upside_sharing_percent) || 50,
+      sowing_advance_percent: Number(offerData.sowing_advance_percent) || 20,
+      sowing_advance_per_quintal: Number(offerData.sowing_advance_per_quintal) || 1000,
+      delivery_window_start: offerData.delivery_window_start || '2026-10-15',
+      delivery_window_end: offerData.delivery_window_end || '2026-11-30',
+      harvest_district: offerData.harvest_district || 'Maharashtra',
+      mill_delivery_center: offerData.mill_delivery_center || 'Central Processing Hub',
+      quality_specs_summary: offerData.quality_specs_summary || 'Standard fair average quality specs',
+      model_form_type: 'MAHARASHTRA_CONTRACT_FARMING_ACT_FORM_C',
+      status: 'OPEN_FOR_BOOKING',
+      participating_farmers_count: Number(offerData.participating_farmers_count) || 1,
+      notes: offerData.notes || 'Official pre-harvest forward contract backed by escrow advance.',
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('forward_contract_offers')
+          .insert([payload])
+          .select()
+          .single();
+        if (!error && data) {
+          return {
+            ...data,
+            target_volume_quintals: Number(data.target_volume_quintals),
+            committed_volume_quintals: Number(data.committed_volume_quintals),
+            pre_harvest_contract_price: Number(data.pre_harvest_contract_price),
+            cacp_msp_floor_price: Number(data.cacp_msp_floor_price),
+            upside_sharing_percent: Number(data.upside_sharing_percent),
+            sowing_advance_percent: Number(data.sowing_advance_percent),
+            sowing_advance_per_quintal: Number(data.sowing_advance_per_quintal),
+            participating_farmers_count: Number(data.participating_farmers_count)
+          } as ForwardContractOffer;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to create forward contract offer in Supabase:', err);
+      }
+    }
+
+    return payload as ForwardContractOffer;
   },
 
   simulateForwardContract(
@@ -4517,6 +4240,8 @@ export const api = {
       await supabase.from('disputes').delete().neq('id', 0);
       await supabase.from('produce_lots').delete().neq('id', 0);
       await supabase.from('notifications').delete().neq('id', 0);
+      await supabase.from('fpo_pool_members').delete().neq('id', 0);
+      await supabase.from('fpo_pools').delete().neq('id', 0);
 
       // Attempt to clean commodity_prices if RLS delete policy allows
       try {
@@ -4534,6 +4259,281 @@ export const api = {
         message: `Purge completed with notice: ${err.message}. For complete database reset, run supabase/clear_all_seed_data.sql in Supabase SQL editor.`
       };
     }
+  },
+
+  // ==========================================
+  // PHASE 6: e-NWR WAREHOUSE PLEDGE LOANS
+  // ==========================================
+
+  async applyForENWRLoan(data: Partial<ENWRPledgeLoanApplication>): Promise<ENWRPledgeLoanApplication> {
+    const qty = data.quantity_quintals || 120;
+    const rate = data.modal_price_per_qtl || 4900;
+    const grossVal = data.gross_valuation || (qty * rate);
+    const ltv = data.loan_ltv_percent || 70;
+    const loanAmt = data.sanctioned_loan_amount || Math.round(grossVal * (ltv / 100));
+    const tenure = data.tenure_days || 45;
+    const interestRate = data.annual_interest_rate_percent || 7.0;
+    const interestCost = Math.round((loanAmt * (interestRate / 100) * tenure) / 365);
+    const receiptNo = `WDRA-MH-${Date.now().toString().slice(-4)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const utr = `MSCB-PLEDGE-DBT-${Date.now().toString().slice(-8)}`;
+
+    const newLoan: ENWRPledgeLoanApplication = {
+      id: 'enwr-' + Date.now(),
+      enwr_receipt_number: receiptNo,
+      farmer_id: data.farmer_id || 'farmer-1',
+      farmer_name: data.farmer_name || 'Registered Farmer',
+      farmer_phone: data.farmer_phone || '',
+      farmer_district: data.farmer_district || 'Nashik',
+      farmer_bank_account: data.farmer_bank_account || 'DBT-Linked Account',
+      farmer_bank_ifsc: data.farmer_bank_ifsc || 'SBIN0001429',
+      commodity: data.commodity || 'Soybean',
+      variety: data.variety || 'JS-335 Grade A',
+      quantity_quintals: qty,
+      warehouse_id: data.warehouse_id || 1,
+      warehouse_name: data.warehouse_name || 'Maharashtra State Warehousing Corp (MSWC) Nodal Depot',
+      warehouse_district: data.warehouse_district || 'Nashik',
+      modal_price_per_qtl: rate,
+      gross_valuation: grossVal,
+      loan_ltv_percent: ltv,
+      sanctioned_loan_amount: loanAmt,
+      annual_interest_rate_percent: interestRate,
+      tenure_days: tenure,
+      total_interest_cost: interestCost,
+      net_disbursed_amount: loanAmt,
+      lending_partner: data.lending_partner || 'Maharashtra State Co-operative Bank (NABARD Refinance Node)',
+      status: 'APPROVED_DISBURSED',
+      disbursement_utr: utr,
+      qr_verification_token: `{"enwr":"${receiptNo}","sanctioned":${loanAmt},"wdra_accredited":true,"utr":"${utr}"}`,
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        await supabase.from('enwr_pledge_loans').insert([newLoan]);
+      } catch (err) {
+        console.warn('[Supabase API] Failed to persist e-NWR loan to database:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_enwr_pledge_loans';
+    let existing: ENWRPledgeLoanApplication[] = [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) existing = JSON.parse(saved);
+    } catch {}
+    existing.unshift(newLoan);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    } catch {}
+
+    await this.addNotification({
+      id: 'notif-enwr-' + Date.now(),
+      title: 'e-NWR Pledge Loan Disbursed',
+      message: `₹${loanAmt.toLocaleString()} credited to A/C (${newLoan.farmer_bank_account}) under WDRA Receipt #${receiptNo}.`,
+      timestamp: 'Just now',
+      type: 'ESCROW',
+      read: false,
+      linkTab: 'intelligence'
+    });
+
+    return newLoan;
+  },
+
+  async getENWRLoans(farmerIdOrName?: string): Promise<ENWRPledgeLoanApplication[]> {
+    if (supabase) {
+      try {
+        let query = supabase.from('enwr_pledge_loans').select('*').order('created_at', { ascending: false });
+        if (farmerIdOrName) {
+          query = query.or(`farmer_name.ilike.%${farmerIdOrName}%,farmer_id.eq.${parseInt(farmerIdOrName) || 0}`);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          return data as ENWRPledgeLoanApplication[];
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to load e-NWR loans from database:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'agroconnect_enwr_pledge_loans';
+    let loans: ENWRPledgeLoanApplication[] = [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) loans = JSON.parse(saved);
+    } catch {}
+    return loans;
+  },
+
+  // ==========================================
+  // PHASE 7: APMC OFFICIAL e-J-FORM (RULE 24)
+  // ==========================================
+
+  async generateAPMCJForm(contractId: number): Promise<APMCJFormRecord> {
+    const contracts = await this.getContracts();
+    const contract = contracts.find(c => c.id === contractId) || contracts[0];
+    const grossWeight = 165;
+    const tareWeight = 45;
+    const netWeight = contract?.quantity_quintals || 120;
+    const rate = contract ? Math.round(contract.total_amount / (contract.quantity_quintals || 1)) : 4920;
+    const grossVal = contract?.total_amount || (netWeight * rate);
+    const cessAmount = Math.round(grossVal * 0.0105);
+    const weighmentFees = 50;
+    const hamali = 240;
+    const totalDeductions = cessAmount + weighmentFees + hamali;
+    const netPayable = grossVal - totalDeductions;
+    const jFormNumber = `MH-APMC-J-2026-${contractId || 301}9`;
+
+    const jForm: APMCJFormRecord = {
+      form_j_number: jFormNumber,
+      apmc_market_yard: `${contract?.delivery_address?.split(',')[0] || 'Latur'} Krishi Utpanna Bajar Samiti (APMC Yard)`,
+      contract_id: contract?.id || contractId,
+      contract_number: contract?.contract_number || 'AGC-MH-20260911-8821',
+      sale_date: new Date().toISOString().split('T')[0],
+      farmer_name: contract?.farmer_name || 'Registered Farmer',
+      farmer_district: 'Latur',
+      farmer_bank_account: '•••••••• 4829',
+      farmer_bank_ifsc: 'SBIN0001429',
+      farmer_aadhaar_last_four: '9182',
+      buyer_name: contract?.buyer_name || 'ADM Agro Industries India Pvt. Ltd.',
+      buyer_license_number: 'MH-MSAMB-TR-2024-8821',
+      commodity: contract?.commodity || 'Soybean',
+      variety: 'JS-335 Grade A',
+      quality_grade: 'Grade A (NABL Certified)',
+      gross_weight_quintals: grossWeight,
+      tare_weight_quintals: tareWeight,
+      net_weight_quintals: netWeight,
+      rate_per_quintal: rate,
+      msp_benchmark_per_quintal: 4892,
+      gross_sale_value: grossVal,
+      market_cess_percent: 1.05,
+      market_cess_amount: cessAmount,
+      weighment_fees: weighmentFees,
+      hamali_and_handling_fees: hamali,
+      total_statutory_deductions: totalDeductions,
+      net_amount_payable: netPayable,
+      escrow_settlement_utr: `RBI-NODAL-NEFT-${contract?.id || 301}8821`,
+      digital_signature_hash: '9f8e7d6c5b4a392817e6d5c4b3a2918273645e4d',
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      try {
+        await supabase.from('apmc_j_forms').upsert([jForm]);
+      } catch (err) {
+        console.warn('[Supabase API] Failed to persist APMC J-Form to database:', err);
+      }
+    }
+
+    const STORAGE_KEY = `agroconnect_jform_${contractId}`;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(jForm));
+    } catch {}
+
+    return jForm;
+  },
+
+  async getAPMCJFormForContract(contractId: number): Promise<APMCJFormRecord | null> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('apmc_j_forms')
+          .select('*')
+          .eq('contract_id', contractId)
+          .maybeSingle();
+        if (!error && data) {
+          return data as APMCJFormRecord;
+        }
+      } catch (err) {
+        console.warn('[Supabase API] Failed to load APMC J-Form from database:', err);
+      }
+    }
+
+    const STORAGE_KEY = `agroconnect_jform_${contractId}`;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return this.generateAPMCJForm(contractId);
+  },
+
+  // ============================================================================
+  // PHASE 7: TIME-SERIES FORECASTING SERVICE (SARIMAX + PROPHET + IMD + DGFT)
+  // ============================================================================
+
+  async getSarimaxCommodityForecast(params: {
+    commodity: string;
+    mandi?: string;
+    district?: string;
+    spot_price?: number;
+    msp?: number;
+  }): Promise<any> {
+    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    try {
+      const query = new URLSearchParams({
+        mandi: params.mandi || 'Lasalgaon APMC',
+        district: params.district || 'Nashik',
+        spot_price: String(params.spot_price || 2450)
+      });
+      if (params.msp) query.set('msp', String(params.msp));
+
+      const res = await fetch(`${FORECAST_SERVICE_URL}/api/forecast/commodity/${encodeURIComponent(params.commodity)}?${query.toString()}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.debug('[Forecast Microservice] Falling back to local preservation engine:', err);
+    }
+    return null;
+  },
+
+  async getArrivalElasticity(params: {
+    commodity: string;
+    mandi?: string;
+    current_arrivals?: number;
+    previous_arrivals?: number;
+    current_price?: number;
+    previous_price?: number;
+  }): Promise<any> {
+    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    try {
+      const query = new URLSearchParams({
+        mandi: params.mandi || 'Lasalgaon APMC',
+        current_arrivals: String(params.current_arrivals || 160),
+        previous_arrivals: String(params.previous_arrivals || 210),
+        current_price: String(params.current_price || 2450),
+        previous_price: String(params.previous_price || 2380)
+      });
+      const res = await fetch(`${FORECAST_SERVICE_URL}/api/elasticity/${encodeURIComponent(params.commodity)}?${query.toString()}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.debug('[Forecast Microservice] Elasticity fallback notice:', err);
+    }
+    return null;
+  },
+
+  async getDGFTPolicies(): Promise<any> {
+    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    try {
+      const res = await fetch(`${FORECAST_SERVICE_URL}/api/trade-policy/dgft`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {}
+    return null;
+  },
+
+  async getIMDDistrictWeather(district: string): Promise<any> {
+    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    try {
+      const res = await fetch(`${FORECAST_SERVICE_URL}/api/weather/imd/${encodeURIComponent(district)}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {}
+    return null;
   }
 };
+
 

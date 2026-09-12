@@ -18,6 +18,7 @@ interface PreHarvestForwardContractModalProps {
   isOpen: boolean;
   onClose: () => void;
   offer?: ForwardContractOffer;
+  currentUser?: any;
   lang: Language;
 }
 
@@ -25,6 +26,7 @@ export const PreHarvestForwardContractModal: React.FC<PreHarvestForwardContractM
   isOpen,
   onClose,
   offer,
+  currentUser,
   lang
 }) => {
   const isMr = lang === 'MR';
@@ -460,7 +462,7 @@ export const PreHarvestForwardContractModal: React.FC<PreHarvestForwardContractM
               {/* Agreement Details */}
               <div style={{ fontSize: '0.82rem', lineHeight: 1.6, marginBottom: '16px' }}>
                 <p>
-                  This Pre-Harvest Forward Farming Agreement is entered into on this <strong>{new Date().toLocaleDateString('en-GB')}</strong> between <strong>{activeOffer.company_name}</strong> (hereinafter referred to as the <em>'Sponsor / Buyer'</em>) and <strong>Balasaheb Shinde (Kisan FPO Member)</strong> (hereinafter referred to as the <em>'Farmer / Producer'</em>).
+                  This Pre-Harvest Forward Farming Agreement is entered into on this <strong>{new Date().toLocaleDateString('en-GB')}</strong> between <strong>{activeOffer.company_name}</strong> (hereinafter referred to as the <em>'Sponsor / Buyer'</em>) and <strong>{currentUser?.name || (isMr ? 'नोंदणीकृत शेतकरी' : 'Registered Farmer')}</strong> (hereinafter referred to as the <em>'Farmer / Producer'</em>).
                 </p>
 
                 <div style={{ backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', padding: '12px', borderRadius: '6px', margin: '12px 0' }}>

@@ -277,6 +277,28 @@ export interface StorageFacility {
   created_at?: string;
 }
 
+export interface StorageBooking {
+  id: string;
+  facility_id: number;
+  facility_name: string;
+  facility_type: 'COLD_STORAGE' | 'WDRA_GODOWN' | 'APMC_WAREHOUSE' | 'CA_STORE';
+  farmer_id?: number;
+  farmer_name: string;
+  farmer_phone: string;
+  commodity: string;
+  quantity_quintals: number;
+  duration_days: number;
+  inward_date: string;
+  daily_tariff: number;
+  total_rent: number;
+  handling_fee: number;
+  total_amount: number;
+  status: 'CONFIRMED' | 'INWARD_SCHEDULED' | 'OCCUPIED' | 'DISPATCHED';
+  qr_code?: string;
+  need_transport?: boolean;
+  created_at: string;
+}
+
 export interface QualityAssay {
   id: number;
   certificate_id: string;
@@ -436,13 +458,16 @@ export interface AIQualityAssayResult {
   timestamp: string;
   commodity: string;
   sample_name: string;
-  predicted_grade: 'Grade A (Export / Modern Retail)' | 'Grade B (Domestic APMC Grade)' | 'Grade C (Industrial / Processing)';
-  grade_code: 'A' | 'B' | 'C';
+  predicted_grade: 'Grade A (Export / Modern Retail)' | 'Grade B (Domestic APMC Grade)' | 'Grade C (Industrial / Processing)' | string;
+  grade_code: 'A+' | 'A' | 'B' | 'C';
   confidence_score: number; // 0 - 100%
   average_diameter_mm: number;
   uniformity_score: number; // 0 - 100%
   blemish_percentage: number;
   estimated_moisture_percent: number;
+  foreign_matter_percent?: number;
+  broken_grain_percent?: number;
+  apmc_grade_classification?: 'FAQ_GRADE_I' | 'FAQ_GRADE_II' | 'NON_FAQ_SUBSTANDARD';
   sprouting_or_damage_detected: boolean;
   color_pigmentation_score: number; // 0 - 100%
   codex_standards_compliant: boolean;
@@ -746,5 +771,76 @@ export interface ForwardPricingSimulation {
   protection_mechanism: 'CONTRACT_PRICE_GUARANTEE' | 'SPOT_UPSIDE_SHARED' | 'MSP_FLOOR_APPLIED';
   explanation_en: string;
   explanation_mr: string;
+}
+
+// ==========================================
+// PHASE 6: e-NWR WAREHOUSE PLEDGE FINANCING
+// ==========================================
+
+export interface ENWRPledgeLoanApplication {
+  id: string;
+  enwr_receipt_number: string;
+  farmer_id?: string;
+  farmer_name: string;
+  farmer_phone: string;
+  farmer_district: string;
+  farmer_bank_account: string;
+  farmer_bank_ifsc: string;
+  commodity: string;
+  variety: string;
+  quantity_quintals: number;
+  warehouse_id: number | string;
+  warehouse_name: string;
+  warehouse_district: string;
+  modal_price_per_qtl: number;
+  gross_valuation: number;
+  loan_ltv_percent: number;
+  sanctioned_loan_amount: number;
+  annual_interest_rate_percent: number;
+  tenure_days: number;
+  total_interest_cost: number;
+  net_disbursed_amount: number;
+  lending_partner: string;
+  status: 'APPROVED_DISBURSED' | 'ACTIVE_PLEDGE' | 'REDEEMED_SETTLED';
+  disbursement_utr: string;
+  qr_verification_token: string;
+  created_at: string;
+}
+
+// ==========================================
+// PHASE 7: APMC OFFICIAL e-J-FORM (RULE 24)
+// ==========================================
+
+export interface APMCJFormRecord {
+  form_j_number: string;
+  apmc_market_yard: string;
+  contract_id: number;
+  contract_number: string;
+  sale_date: string;
+  farmer_name: string;
+  farmer_district: string;
+  farmer_bank_account: string;
+  farmer_bank_ifsc: string;
+  farmer_aadhaar_last_four: string;
+  buyer_name: string;
+  buyer_license_number: string;
+  commodity: string;
+  variety: string;
+  quality_grade: string;
+  gross_weight_quintals: number;
+  tare_weight_quintals: number;
+  net_weight_quintals: number;
+  rate_per_quintal: number;
+  msp_benchmark_per_quintal: number;
+  gross_sale_value: number;
+  market_cess_percent: number;
+  market_cess_amount: number;
+  weighment_fees: number;
+  hamali_and_handling_fees: number;
+  total_statutory_deductions: number;
+  net_amount_payable: number;
+  escrow_settlement_utr: string;
+  digital_signature_hash: string;
+  created_at: string;
 }
 

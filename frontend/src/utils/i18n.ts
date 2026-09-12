@@ -49,6 +49,7 @@ export interface TranslationDict {
   // New Harvest Modal
   publishBatchTitle: string;
   commodityLabel: string;
+  varietyLabel: string;
   harvestVolumeLabel: string;
   baseAskingRateLabel: string;
   qualityGradeLabel: string;
@@ -202,8 +203,9 @@ export const translations: Record<Language, TranslationDict> = {
     counterOfferBtn: 'Counter Offer',
 
     publishBatchTitle: 'List New Harvest Batch (Govt. Assay Certified)',
-    commodityLabel: 'Commodity & Variety',
-    harvestVolumeLabel: 'Harvest Volume (Metric Tonnes)',
+    commodityLabel: 'Commodity Type',
+    varietyLabel: 'Variety / Cultivar',
+    harvestVolumeLabel: 'Harvest Volume',
     baseAskingRateLabel: 'Base Asking Rate (₹ / Quintal)',
     qualityGradeLabel: 'Quality Grade',
     moistureLabel: 'Moisture Percentage (%)',
@@ -350,8 +352,9 @@ export const translations: Record<Language, TranslationDict> = {
     counterOfferBtn: 'प्रति-दर पाठवा',
 
     publishBatchTitle: 'नवीन शेतमाल बॅच नोंदवा (शासकीय चाचणी प्रमाणित)',
-    commodityLabel: 'शेतमाल व जात (Variety)',
-    harvestVolumeLabel: 'एकूण प्रमाण (मेट्रिक टन)',
+    commodityLabel: 'शेतमालाचा प्रकार',
+    varietyLabel: 'शेतमालाची जात (Variety)',
+    harvestVolumeLabel: 'एकूण प्रमाण (वजन)',
     baseAskingRateLabel: 'किमान अपेक्षित दर (रु./क्विंटल)',
     qualityGradeLabel: 'गुणवत्ता प्रत (Grade)',
     moistureLabel: 'आर्द्रता टक्केवारी (%)',

@@ -179,25 +179,6 @@ VALUES
 ('Maize', 'Yellow Corn', '2024-25', 'Kharif', 2225.00, 1483.00, 50.00, 'Commission for Agricultural Costs & Prices (CACP)')
 ON CONFLICT DO NOTHING;
 
--- 10. SEED INITIAL FPO COLLECTIVE POOLS
-INSERT INTO public.fpo_pools (id, fpo_name, fpo_registration_number, fpo_contact_person, fpo_contact_phone, district, state, central_hub_location, commodity, variety, quality_grade, target_volume_quintals, collected_volume_quintals, unit_base_price, status, expected_fulfillment_date, description, fpo_certified, assay_certificate_id)
-VALUES
-(101, 'Sahyadri Farmers Producer Co. Ltd.', 'MH-NAS-FPO-2018-0912', 'Pravin Joshi (Cluster Lead)', '+91 98220 88123', 'Nashik', 'Maharashtra', 'Dindori Agro-Processing & Cold Storage Cluster, Nashik', 'Onion', 'Garwa Grade A (Export Quality)', 'Grade A', 600.0, 340.0, 2550.0, 'OPEN_FOR_CONTRIBUTIONS', CURRENT_DATE + INTERVAL '7 days', 'Pooled collective batch from 12 smallholders in Dindori & Niphad talukas targeting direct supply to Mumbai wholesale retail chains with guaranteed minimum payment escrow.', true, 'QC-AGRO-2026-9812'),
-(102, 'Mahagrapes Farmers Producer Consortium', 'MH-PUN-FPO-2019-1420', 'Anand Kulkarni (Consortium Manager)', '+91 98224 77112', 'Pune', 'Maharashtra', 'Baramati Mega Food Park Hub, Pune', 'Tomato', 'Hybrid Vaishali (Firm Red)', 'Grade A', 400.0, 280.0, 1850.0, 'OPEN_FOR_CONTRIBUTIONS', CURRENT_DATE + INTERVAL '5 days', 'Consolidated collective lot aggregated across Baramati & Purandar FPO clusters for processing and table consumption with cold-chain transit.', true, 'QC-AGRO-2026-7734'),
-(103, 'Marathwada Oilseed & Pulse Kisan Producer Federation', 'MH-LAT-FPO-2021-3310', 'Dnyaneshwar Gaikwad (FPO Secretary)', '+91 98220 45678', 'Latur', 'Maharashtra', 'Latur Pulse & Oilseed APMC Terminal Yard', 'Soybean', 'Yellow (JS-335 High Oil Content)', 'Grade A', 800.0, 560.0, 5020.0, 'OPEN_FOR_CONTRIBUTIONS', CURRENT_DATE + INTERVAL '10 days', 'Institutional batch consolidated for edible oil extraction mills in Latur & Solapur districts. Assayed at 10.8% moisture and 19.4% oil content.', true, 'QC-AGRO-2026-4421'),
-(104, 'Vidarbha White Gold Cotton Producer Co.', 'MH-AMR-FPO-2020-5512', 'Ganesh Pawar (Federation Chairman)', '+91 98220 78901', 'Amravati', 'Maharashtra', 'Amravati Cotton Market Terminal Yard', 'Cotton', 'Long Staple (DCH-32 31mm)', 'Grade A', 500.0, 420.0, 7450.0, 'OPEN_FOR_CONTRIBUTIONS', CURRENT_DATE + INTERVAL '8 days', 'Direct mill-grade long-staple cotton lot consolidated across 8 cooperative societies in Amravati & Yavatmal districts.', true, 'QC-AGRO-2026-1190')
-ON CONFLICT (id) DO NOTHING;
+-- 10. INITIAL FPO COLLECTIVE POOLS (Mock seed removed - start clean)
+-- Pools are now launched dynamically by users/cooperatives.
 
--- 11. SEED FPO POOL MEMBERS
-INSERT INTO public.fpo_pool_members (pool_id, farmer_name, farmer_phone, district, quantity_quintals, grade, payout_share_percent)
-VALUES
-(101, 'Ramesh Patil', '9822012345', 'Nashik', 120.0, 'Grade A', 35.29),
-(101, 'Sunita Deshmukh', '9822023456', 'Nashik', 100.0, 'Grade A', 29.41),
-(101, 'Balasaheb Shinde', '9822034567', 'Nashik', 120.0, 'Grade A', 35.30),
-(102, 'Sunita Deshmukh', '9822023456', 'Pune', 150.0, 'Grade A', 53.57),
-(102, 'Prakash Jadhav', '9822056789', 'Pune', 130.0, 'Grade A', 46.43),
-(103, 'Dnyaneshwar Gaikwad', '9822045678', 'Latur', 300.0, 'Grade A', 53.57),
-(103, 'Ganesh Pawar', '9822078901', 'Latur', 260.0, 'Grade A', 46.43),
-(104, 'Ganesh Pawar', '9822078901', 'Amravati', 250.0, 'Grade A', 59.52),
-(104, 'Santosh Borade', '9822067890', 'Amravati', 170.0, 'Grade A', 40.48)
-ON CONFLICT DO NOTHING;

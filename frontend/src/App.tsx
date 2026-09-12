@@ -8,6 +8,8 @@ import { EscrowContractHub } from './components/EscrowContractHub';
 import { DisputePortal } from './components/DisputePortal';
 import { BuyerDemandBoard } from './components/BuyerDemandBoard';
 import { AuthModal } from './components/AuthModal';
+import { KisanVoiceModal } from './components/KisanVoiceModal';
+import { AIQualityAssayModal } from './components/AIQualityAssayModal';
 import { api, type User, type ProduceLot } from './services/api';
 import { type Language } from './utils/i18n';
 import { getRolePermissions } from './utils/rbac';
@@ -31,6 +33,10 @@ export const App: React.FC = () => {
   const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
   const [negotiationLot, setNegotiationLot] = useState<ProduceLot | null>(null);
   const [prefillLotData, setPrefillLotData] = useState<{ commodity: string; variety?: string; price: number; mandi?: string } | null>(null);
+
+  // SIH AI Capabilities Modals State
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
+  const [isQualityModalOpen, setIsQualityModalOpen] = useState<boolean>(false);
 
   const handleListLotFromMandi = (data: { commodity: string; variety?: string; price: number; mandi?: string }) => {
     setPrefillLotData(data);
@@ -229,6 +235,8 @@ export const App: React.FC = () => {
           setIsAuthModalOpen(true);
         }}
         onLogout={handleLogout}
+        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+        onOpenQualityModal={() => setIsQualityModalOpen(true)}
       />
 
       {/* RBAC Active Role Banner Strip */}
@@ -423,6 +431,75 @@ export const App: React.FC = () => {
         pendingMessage={authModalMessage}
         lang={lang}
       />
+
+      {/* SIH AI Capability 1: Multilingual Kisan Voice Assistant Modal */}
+      <KisanVoiceModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        lang={lang}
+        onNavigateTab={(tab, prefill) => {
+          if (prefill && tab === 'farmer') {
+            setPrefillLotData(prefill);
+          }
+          setActiveTab(tab);
+        }}
+      />
+
+      {/* SIH AI Capability 2: Computer Vision Grain Quality Assay Lab Modal */}
+      <AIQualityAssayModal
+        isOpen={isQualityModalOpen}
+        onClose={() => setIsQualityModalOpen(false)}
+        onApplyGrade={(result) => {
+          setPrefillLotData({
+            commodity: result.commodity,
+            variety: result.sample_name || `${result.commodity} FAQ`,
+            price: result.suggested_price_multiplier ? Math.round(5120 * result.suggested_price_multiplier) : 5120,
+            mandi: 'Terminal APMC Yard'
+          });
+          setActiveTab('farmer');
+        }}
+        initialCommodity="Soybean"
+        contextMode="LISTING"
+      />
+
+      {/* Floating Bottom-Right Kisan Voice AI Button */}
+      <button
+        type="button"
+        onClick={() => setIsVoiceModalOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          backgroundColor: '#064e3b',
+          color: '#ffffff',
+          border: '2px solid #34d399',
+          borderRadius: '50px',
+          padding: '10px 18px',
+          fontSize: '0.82rem',
+          fontWeight: 800,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 8px 24px rgba(6, 78, 59, 0.45)',
+          cursor: 'pointer',
+          zIndex: 9990,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        title={lang === 'MR' ? 'किसान व्हॉइस एआय - आवाजाने बाजारभाव विचारा' : 'Kisan Voice AI Assistant'}
+      >
+        <span style={{
+          width: '10px',
+          height: '10px',
+          borderRadius: '50%',
+          backgroundColor: '#34d399',
+          boxShadow: '0 0 8px #34d399',
+          display: 'inline-block',
+          animation: 'pulse 1.8s infinite'
+        }} />
+        <span>🎙️ {lang === 'MR' ? 'शेतकरी आवाज एआय' : 'Kisan Voice AI'}</span>
+      </button>
 
       {/* Footer */}
       <footer style={{ 

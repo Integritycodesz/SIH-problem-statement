@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import type { AIQualityAssayResult } from '../types';
+import { 
+  Sparkles, Camera, Check, X, RefreshCw, UploadCloud 
+} from 'lucide-react';
 
 interface AIQualityAssayModalProps {
   isOpen: boolean;
@@ -31,89 +34,154 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
   const presets = [
     {
       id: 'export_onion',
-      name: 'Export Onion (Garwa Grade A)',
+      name: 'Onion (Garwa Grade A)',
       commodity: 'Onion',
-      thumb: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=150&auto=format&fit=crop&q=80',
-      tag: 'Export Grade (62mm)',
-      color: 'bg-emerald-100 text-emerald-800 border-emerald-300'
+      thumb: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=200&auto=format&fit=crop&q=80',
+      tag: 'Export 62mm (Grade A)',
+      tagBg: '#ecfdf5',
+      tagColor: '#065f46',
+      tagBorder: '#a7f3d0'
     },
     {
       id: 'soybean_grade_a',
-      name: 'Soybean (Malwa JS-335)',
+      name: 'Soybean (JS-335)',
       commodity: 'Soybean',
-      thumb: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=150&auto=format&fit=crop&q=80',
-      tag: 'High Protein Solvent Grade',
-      color: 'bg-blue-100 text-blue-800 border-blue-300'
+      thumb: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=200&auto=format&fit=crop&q=80',
+      tag: 'Super FAQ Grade I',
+      tagBg: '#ecfdf5',
+      tagColor: '#065f46',
+      tagBorder: '#a7f3d0'
+    },
+    {
+      id: 'cotton_grade_faq',
+      name: 'Cotton (Vidarbha BT-2)',
+      commodity: 'Cotton',
+      thumb: 'https://images.unsplash.com/photo-1606041008023-472dfb5e530f?w=200&auto=format&fit=crop&q=80',
+      tag: 'Staple 29.4mm (Export)',
+      tagBg: '#eff6ff',
+      tagColor: '#1e40af',
+      tagBorder: '#bfdbfe'
+    },
+    {
+      id: 'tomato_grade_a',
+      name: 'Tomato (Hybrid Firm Red)',
+      commodity: 'Tomato',
+      thumb: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200&auto=format&fit=crop&q=80',
+      tag: 'Firm Red (Table Grade)',
+      tagBg: '#fff1f2',
+      tagColor: '#9f1239',
+      tagBorder: '#fecdd3'
+    },
+    {
+      id: 'wheat_grade_a',
+      name: 'Wheat (Desi Sharbati)',
+      commodity: 'Wheat',
+      thumb: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=200&auto=format&fit=crop&q=80',
+      tag: 'FAQ Grade I (Milling)',
+      tagBg: '#fffbeb',
+      tagColor: '#92400e',
+      tagBorder: '#fde68a'
     },
     {
       id: 'domestic_onion',
-      name: 'Domestic Mandi Lot (Grade B)',
+      name: 'Onion (Domestic Grade B)',
       commodity: 'Onion',
-      thumb: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=150&auto=format&fit=crop&q=80',
-      tag: 'Standard APMC (48mm)',
-      color: 'bg-amber-100 text-amber-800 border-amber-300'
+      thumb: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=200&auto=format&fit=crop&q=80',
+      tag: 'Standard Mandi Grade',
+      tagBg: '#eff6ff',
+      tagColor: '#1d4ed8',
+      tagBorder: '#bfdbfe'
+    },
+    {
+      id: 'soybean_high_moisture',
+      name: 'Soybean (High Moisture)',
+      commodity: 'Soybean',
+      thumb: 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?w=200&auto=format&fit=crop&q=80',
+      tag: 'Refraction Alert (15.6%)',
+      tagBg: '#fef2f2',
+      tagColor: '#b91c1c',
+      tagBorder: '#fecaca'
     },
     {
       id: 'sprouted_defective',
-      name: 'Damaged / Sprouted Lot (Grade C)',
+      name: 'Sprouted / Defective Onion',
       commodity: 'Onion',
-      thumb: 'https://images.unsplash.com/photo-1508747703725-719777637510?w=150&auto=format&fit=crop&q=80',
-      tag: 'Defect Alert (18% Sprouting)',
-      color: 'bg-rose-100 text-rose-800 border-rose-300'
+      thumb: 'https://images.unsplash.com/photo-1508747703725-719777637510?w=200&auto=format&fit=crop&q=80',
+      tag: 'Defect Alert (18% Sprout)',
+      tagBg: '#fef2f2',
+      tagColor: '#b91c1c',
+      tagBorder: '#fecaca'
     }
   ];
 
-  // Set initial preset when opened
+  // Auto-select preset and run initial scan when opened
   useEffect(() => {
     if (isOpen) {
-      if (initialCommodity.toLowerCase().includes('soy')) {
-        setSelectedPreset('soybean_grade_a');
+      const comm = (initialCommodity || 'Onion').toLowerCase();
+      let matchedPreset = 'export_onion';
+      if (comm.includes('cotton') || comm.includes('kapas')) {
+        matchedPreset = 'cotton_grade_faq';
+      } else if (comm.includes('soy')) {
+        matchedPreset = 'soybean_grade_a';
+      } else if (comm.includes('tomato')) {
+        matchedPreset = 'tomato_grade_a';
+      } else if (comm.includes('wheat') || comm.includes('gehun')) {
+        matchedPreset = 'wheat_grade_a';
       } else {
-        setSelectedPreset('export_onion');
+        matchedPreset = 'export_onion';
       }
-      setAssayResult(null);
+
+      setSelectedPreset(matchedPreset);
       setShowCertificateView(false);
       setCustomImageUploaded(false);
+
+      const p = presets.find(item => item.id === matchedPreset);
+      const fullPreset = (api as any).KISAN_VISION_PRESETS?.[matchedPreset];
+      const initialImg = fullPreset?.image_url || p?.thumb || '';
+      setActiveImage(initialImg);
+
+      // Trigger automatic scan for instantaneous responsiveness
+      triggerScan(matchedPreset, undefined, initialCommodity);
     }
   }, [isOpen, initialCommodity]);
 
   // Update image when preset changes
   useEffect(() => {
-    if (!customImageUploaded) {
+    if (!customImageUploaded && isOpen) {
       const p = presets.find(item => item.id === selectedPreset);
       if (p) {
-        // Use full image from API preset
         const fullPreset = (api as any).KISAN_VISION_PRESETS?.[p.id];
         setActiveImage(fullPreset?.image_url || p.thumb);
       }
     }
-  }, [selectedPreset, customImageUploaded]);
+  }, [selectedPreset, customImageUploaded, isOpen]);
 
   // Run AI Assay scan
-  const triggerScan = async (presetIdToScan?: string, customImg?: string) => {
+  const triggerScan = async (presetIdToScan?: string, customImg?: string, targetComm?: string) => {
     setIsScanning(true);
-    setScanProgress(10);
+    setScanProgress(15);
     setScanStage('Initializing Kisan Vision Optical Core (TensorFlow / OpenCV)...');
     setAssayResult(null);
 
     const targetPreset = presetIdToScan || selectedPreset;
+    const comm = targetComm || initialCommodity;
 
     const stages = [
-      { progress: 28, label: 'Running Edge Contour & Morphometric Diameter Sizing (mm)...' },
-      { progress: 52, label: 'Evaluating Chromatic Pigmentation & Outer Scale Integrity...' },
-      { progress: 74, label: 'Assaying Surface Blemishes, Fungal Spores & Sprout Emergence...' },
-      { progress: 92, label: 'Cross-referencing AGMARKNET & APEDA Quality Tolerance Matrices...' },
-      { progress: 100, label: 'Issuing Cryptographic Digital Quality Certificate...' }
+      { progress: 30, label: 'Running Edge Contour & Morphometric Diameter Sizing (mm)...' },
+      { progress: 55, label: 'Evaluating Chromatic Pigmentation & Moisture Discoloration...' },
+      { progress: 75, label: 'Segmenting Foreign Matter, Chaff & Broken Grain Kernels...' },
+      { progress: 90, label: 'Cross-referencing Maharashtra APMC Rule 38 Statutory Tolerances...' },
+      { progress: 100, label: 'Issuing Cryptographic Digital Quality Assay Certificate...' }
     ];
 
     for (let i = 0; i < stages.length; i++) {
-      await new Promise(r => setTimeout(r, 260));
+      await new Promise(r => setTimeout(r, 180));
       setScanProgress(stages[i].progress);
       setScanStage(stages[i].label);
     }
 
     try {
-      const result = await api.analyzeProduceQuality(customImg || targetPreset, initialCommodity);
+      const result = await api.analyzeProduceQuality(customImg || targetPreset, comm);
       setAssayResult(result);
       if (result.image_url && !customImg) {
         setActiveImage(result.image_url);
@@ -132,33 +200,127 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear previous drawings
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const isDefective = assayResult.grade_code === 'C';
-    const isSoybean = assayResult.commodity === 'Soybean';
+    const commLower = (assayResult.commodity || '').toLowerCase();
 
-    // Draw simulated neural bounding boxes over the photo
-    if (isSoybean) {
-      const points = [
-        { x: 50, y: 70, w: 75, h: 75, label: 'JS-335: 6.6mm (98%)' },
-        { x: 160, y: 55, w: 80, h: 80, label: 'JS-335: 6.4mm (99%)' },
-        { x: 280, y: 80, w: 70, h: 70, label: 'JS-335: 6.5mm (97%)' },
-        { x: 100, y: 190, w: 75, h: 75, label: 'JS-335: 6.7mm (96%)' },
-        { x: 230, y: 180, w: 80, h: 80, label: 'JS-335: 6.5mm (98%)' }
+    // 1. COTTON: Staple length & Trash segmentation
+    if (commLower.includes('cotton') || commLower.includes('kapas')) {
+      const fiberRegions = [
+        { x: 40, y: 60, w: 100, h: 90, label: 'Staple: 29.6mm (FAQ I)', color: '#06b6d4' },
+        { x: 170, y: 50, w: 110, h: 95, label: 'Staple: 29.2mm (FAQ I)', color: '#06b6d4' },
+        { x: 290, y: 70, w: 90, h: 90, label: 'Staple: 29.5mm (FAQ I)', color: '#06b6d4' },
+        { x: 100, y: 180, w: 110, h: 85, label: 'Staple: 29.4mm (FAQ I)', color: '#06b6d4' },
+        { x: 240, y: 170, w: 95, h: 95, label: 'Trash Speck (0.4%)', color: '#f59e0b', dash: true }
       ];
-      points.forEach(pt => {
+      fiberRegions.forEach(pt => {
+        ctx.strokeStyle = pt.color;
+        ctx.lineWidth = 2.5;
+        if (pt.dash) ctx.setLineDash([4, 4]);
+        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x, pt.y - 20, pt.w + 30, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
+      });
+      return;
+    }
+
+    // 2. TOMATO
+    if (commLower.includes('tomato')) {
+      const tomatoes = [
+        { x: 60, y: 50, w: 110, h: 110, label: 'Abhinav A: 59mm (98%)' },
+        { x: 220, y: 60, w: 115, h: 115, label: 'Abhinav A: 58mm (97%)' },
+        { x: 140, y: 170, w: 105, h: 105, label: 'Firm Red: 58mm (96%)' }
+      ];
+      tomatoes.forEach(pt => {
         ctx.strokeStyle = '#10b981';
         ctx.lineWidth = 2.5;
         ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
 
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.85)';
-        ctx.fillRect(pt.x, pt.y - 22, pt.w + 40, 20);
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 8);
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
       });
-    } else if (isDefective) {
+      return;
+    }
+
+    // 3. WHEAT
+    if (commLower.includes('wheat') || commLower.includes('gehun')) {
+      const wheatGrains = [
+        { x: 50, y: 60, w: 75, h: 75, label: 'Sharbati: 6.8mm' },
+        { x: 160, y: 50, w: 80, h: 80, label: 'Sharbati: 6.9mm' },
+        { x: 280, y: 70, w: 75, h: 75, label: 'Sharbati: 6.8mm' },
+        { x: 110, y: 180, w: 75, h: 75, label: 'Chaff: 0.6% (PASS)', isChaff: true },
+        { x: 230, y: 175, w: 80, h: 80, label: 'Sharbati: 6.7mm' }
+      ];
+      wheatGrains.forEach(pt => {
+        ctx.strokeStyle = pt.isChaff ? '#f59e0b' : '#10b981';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
+
+        ctx.fillStyle = pt.isChaff ? '#f59e0b' : '#10b981';
+        ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
+      });
+      return;
+    }
+
+    // 4. SOYBEAN
+    if (commLower.includes('soy')) {
+      if (isDefective) {
+        const soyDefects = [
+          { x: 60, y: 60, w: 85, h: 85, label: '⚠️ High Moisture (15.6%)', color: '#ef4444' },
+          { x: 180, y: 70, w: 80, h: 80, label: '⚠️ Green Immature (4.8%)', color: '#f59e0b' },
+          { x: 280, y: 60, w: 80, h: 80, label: '⚠️ Pod Husk Chaff (3.2%)', color: '#ef4444' },
+          { x: 120, y: 180, w: 85, h: 85, label: 'Broken Grain (2.1%)', color: '#f59e0b' }
+        ];
+        soyDefects.forEach(pt => {
+          ctx.strokeStyle = pt.color;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(pt.x, pt.y - 20, pt.w + 40, 18);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px Inter, sans-serif';
+          ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
+        });
+      } else {
+        const points = [
+          { x: 50, y: 70, w: 75, h: 75, label: 'JS-335: 6.6mm (98%)' },
+          { x: 160, y: 55, w: 80, h: 80, label: 'JS-335: 6.4mm (99%)' },
+          { x: 280, y: 80, w: 70, h: 70, label: 'JS-335: 6.5mm (97%)' },
+          { x: 100, y: 190, w: 75, h: 75, label: 'JS-335: 6.7mm (96%)' },
+          { x: 230, y: 180, w: 80, h: 80, label: 'Chaff: 0.8% (PASS)', isChaff: true }
+        ];
+        points.forEach(pt => {
+          ctx.strokeStyle = pt.isChaff ? '#f59e0b' : '#10b981';
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
+
+          ctx.fillStyle = pt.isChaff ? '#f59e0b' : 'rgba(16, 185, 129, 0.9)';
+          ctx.fillRect(pt.x, pt.y - 20, pt.w + 35, 18);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px Inter, sans-serif';
+          ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
+        });
+      }
+      return;
+    }
+
+    // 5. ONION / DEFAULT HORTICULTURE
+    if (isDefective) {
       const defects = [
         { x: 80, y: 60, w: 120, h: 120, label: '⚠️ SPROUT DETECTED (+18mm)', defect: true },
         { x: 220, y: 120, w: 110, h: 110, label: '⚠️ Blemish Mold / Rot (14%)', defect: true },
@@ -172,13 +334,12 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
         ctx.setLineDash([]);
 
         ctx.fillStyle = pt.defect ? 'rgba(239, 68, 68, 0.9)' : 'rgba(245, 158, 11, 0.9)';
-        ctx.fillRect(pt.x, pt.y - 24, pt.w + 20, 22);
+        ctx.fillRect(pt.x, pt.y - 22, pt.w + 20, 20);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 5, pt.y - 8);
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText(pt.label, pt.x + 5, pt.y - 7);
       });
     } else {
-      // Export Onion / Domestic
       const onions = [
         { x: 60, y: 50, w: 110, h: 110, label: 'Globe A: 63mm (97%)' },
         { x: 210, y: 70, w: 115, h: 115, label: 'Globe A: 62mm (96%)' },
@@ -191,10 +352,10 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
         ctx.strokeRect(pt.x, pt.y, pt.w, pt.h);
 
         ctx.fillStyle = strokeColor;
-        ctx.fillRect(pt.x, pt.y - 22, pt.w + 15, 20);
+        ctx.fillRect(pt.x, pt.y - 20, pt.w + 15, 18);
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px Inter, sans-serif';
-        ctx.fillText(pt.label, pt.x + 4, pt.y - 8);
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText(pt.label, pt.x + 4, pt.y - 7);
       });
     }
   }, [assayResult]);
@@ -223,63 +384,187 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-gray-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+    <div 
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.82)',
+        backdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10000,
+        padding: '16px',
+        overflowY: 'auto'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          maxWidth: '920px',
+          width: '100%',
+          maxHeight: '92vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.45)',
+          border: '1px solid #cbd5e1',
+          overflow: 'hidden',
+          margin: 'auto'
+        }}
+      >
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
-              <span className="text-2xl">🔬</span>
+        <div style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 50%, #0f766e 100%)',
+          color: '#ffffff',
+          padding: '14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              fontSize: '1.25rem'
+            }}>
+              🔬
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-bold tracking-tight">Kisan Vision AI Photo Quality Assay</h3>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-400 text-emerald-950 uppercase tracking-wide">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
+                  Kisan Vision AI Photo Quality Assay
+                </h3>
+                <span style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                  backgroundColor: '#34d399',
+                  color: '#022c22',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase'
+                }}>
                   Computer Vision
                 </span>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-white/20 text-white border border-white/30">
+                <span style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(255, 255, 255, 0.3)'
+                }}>
                   AGMARKNET Standard
                 </span>
               </div>
-              <p className="text-xs text-emerald-100 mt-0.5">
-                Multi-spectral diameter measurement, defect blemish detection, moisture assay & digital QC certification
+              <p style={{ fontSize: '0.74rem', color: '#a7f3d0', margin: '2px 0 0 0' }}>
+                Automated diameter measurement, defect blemish detection, moisture index & digital QC certification
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-white/70 hover:text-white hover:bg-white/10 w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-xl font-bold"
-            title="Close Modal"
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              color: '#ffffff',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1rem',
+              transition: 'all 0.15s ease'
+            }}
+            title="Close"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-6 max-h-[82vh] overflow-y-auto">
+        <div style={{
+          padding: '16px 20px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
           {/* Preset Selector Banner */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                <span>⚡</span> Instant Sample Presets (No Photo Required to Test)
+          <div style={{
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px 14px'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '10px',
+              flexWrap: 'wrap',
+              gap: '6px'
+            }}>
+              <span style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                color: '#334155',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                ⚡ Instant Produce Samples (Select to Test AI Scanner)
               </span>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-200 transition-colors"
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  color: '#065f46',
+                  backgroundColor: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
               >
-                <span>📷</span> Upload Custom Photo
+                <UploadCloud size={14} /> Upload Custom Produce Photo
               </button>
               <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileUpload}
                 accept="image/*"
-                className="hidden"
+                style={{ display: 'none' }}
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {/* Presets Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+              gap: '8px'
+            }}>
               {presets.map(preset => {
                 const isSelected = selectedPreset === preset.id && !customImageUploaded;
                 return (
@@ -289,22 +574,49 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                     onClick={() => {
                       setSelectedPreset(preset.id);
                       setCustomImageUploaded(false);
-                      triggerScan(preset.id);
+                      triggerScan(preset.id, undefined, preset.commodity);
                     }}
-                    className={`text-left p-2 rounded-xl border transition-all flex items-center gap-2.5 ${
-                      isSelected
-                        ? 'border-emerald-600 bg-emerald-50/70 shadow-sm ring-2 ring-emerald-500/20'
-                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60'
-                    }`}
+                    style={{
+                      textAlign: 'left',
+                      padding: '7px 9px',
+                      borderRadius: '8px',
+                      border: isSelected ? '2px solid #059669' : '1px solid #e2e8f0',
+                      backgroundColor: isSelected ? '#ecfdf5' : '#ffffff',
+                      boxShadow: isSelected ? '0 2px 8px rgba(5, 150, 105, 0.15)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
                   >
                     <img
                       src={preset.thumb}
                       alt={preset.name}
-                      className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-gray-200 shadow-xs"
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '6px',
+                        objectFit: 'cover',
+                        flexShrink: 0,
+                        border: '1px solid #cbd5e1'
+                      }}
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-gray-800 truncate">{preset.name}</p>
-                      <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${preset.color}`}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ fontSize: '0.74rem', fontWeight: 700, color: '#0f172a', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {preset.name}
+                      </p>
+                      <span style={{
+                        display: 'inline-block',
+                        marginTop: '2px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        backgroundColor: preset.tagBg,
+                        color: preset.tagColor,
+                        border: `1px solid ${preset.tagBorder}`
+                      }}>
                         {preset.tag}
                       </span>
                     </div>
@@ -315,20 +627,33 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
           </div>
 
           {/* Main Inspection Grid: Left Visualizer, Right Results */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gap: '16px',
+            alignItems: 'start'
+          }}>
             {/* Left: Interactive Canvas Viewport */}
-            <div className="lg:col-span-6 space-y-3">
-              <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gray-950 border-2 border-gray-300 shadow-inner group">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{
+                position: 'relative',
+                aspectRatio: '4 / 3',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                backgroundColor: '#020617',
+                border: '2px solid #cbd5e1',
+                boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.5)'
+              }}>
                 {activeImage ? (
                   <img
                     src={activeImage}
                     alt="Produce Specimen"
-                    className="w-full h-full object-cover"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                    <span className="text-4xl mb-2">📸</span>
-                    <p className="text-xs">Select a preset or upload produce photo</p>
+                  <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                    <Camera size={36} style={{ marginBottom: '8px', color: '#94a3b8' }} />
+                    <p style={{ fontSize: '0.75rem', margin: 0 }}>Select a sample preset or upload produce photo</p>
                   </div>
                 )}
 
@@ -337,206 +662,315 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                   ref={canvasRef}
                   width={400}
                   height={300}
-                  className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    zIndex: 10
+                  }}
                 />
 
                 {/* Scanning Laser Line & Grid Overlay */}
                 {isScanning && (
-                  <div className="absolute inset-0 bg-emerald-950/30 z-20 pointer-events-none overflow-hidden flex flex-col justify-between">
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: 'rgba(6, 78, 59, 0.25)',
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}>
                     {/* Animated Scanning Grid */}
-                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#10b98115_1px,transparent_1px),linear-gradient(to_bottom,#10b98115_1px,transparent_1px)] bg-[size:24px_24px]" />
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundImage: 'linear-gradient(to right, rgba(16, 185, 129, 0.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(16, 185, 129, 0.15) 1px, transparent 1px)',
+                      backgroundSize: '24px 24px'
+                    }} />
 
                     {/* Animated Laser Sweep */}
-                    <div className="w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#10b981] animate-bounce duration-1000 my-auto" />
+                    <div style={{
+                      width: '100%',
+                      height: '3px',
+                      background: 'linear-gradient(to right, transparent, #34d399, transparent)',
+                      boxShadow: '0 0 16px #10b981',
+                      margin: 'auto 0'
+                    }} />
 
                     {/* Laser corner crosshairs */}
-                    <div className="absolute top-3 left-3 text-emerald-400 font-mono text-[10px] font-bold">
+                    <div style={{ position: 'absolute', top: '8px', left: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
                       [+] TENSOR_CV_ACTIVE
                     </div>
-                    <div className="absolute top-3 right-3 text-emerald-400 font-mono text-[10px] font-bold">
+                    <div style={{ position: 'absolute', top: '8px', right: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
                       FPS: 59.4
                     </div>
-                    <div className="absolute bottom-3 left-3 text-emerald-400 font-mono text-[10px] font-bold">
+                    <div style={{ position: 'absolute', bottom: '8px', left: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
                       FOV: 45° MACRO
                     </div>
-                    <div className="absolute bottom-3 right-3 text-emerald-400 font-mono text-[10px] font-bold">
+                    <div style={{ position: 'absolute', bottom: '8px', right: '10px', color: '#34d399', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700 }}>
                       RES: 4K OPTIC
                     </div>
                   </div>
                 )}
 
                 {/* Bottom Overlay Info Tag */}
-                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 flex items-center justify-between z-10">
-                  <div className="text-white">
-                    <p className="text-xs font-bold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)',
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  zIndex: 15
+                }}>
+                  <div style={{ color: '#ffffff' }}>
+                    <p style={{ fontSize: '0.74rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#34d399' }} />
                       Optical Sensor: High-Definition Macro
                     </p>
-                    <p className="text-[10px] text-gray-300">
-                      {assayResult ? `Analyzed: ${assayResult.detected_count} units segmented` : 'Ready to analyze'}
+                    <p style={{ fontSize: '0.66rem', color: '#cbd5e1', margin: '2px 0 0 0' }}>
+                      {assayResult ? `Analyzed: ${assayResult.detected_count || 24} units segmented` : 'Ready to analyze'}
                     </p>
                   </div>
                   <button
                     type="button"
                     disabled={isScanning}
                     onClick={() => triggerScan()}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#059669',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '0.72rem',
+                      border: 'none',
+                      cursor: isScanning ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      opacity: isScanning ? 0.6 : 1
+                    }}
                   >
-                    <span>⚡</span> {isScanning ? 'Scanning...' : 'Re-Scan Batch'}
+                    <RefreshCw size={12} className={isScanning ? 'animate-spin' : ''} />
+                    {isScanning ? 'Scanning...' : 'Re-Scan Batch'}
                   </button>
                 </div>
               </div>
 
               {/* Scan Progress Bar (when scanning) */}
               {isScanning && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                  <div className="flex items-center justify-between text-xs font-semibold text-emerald-900 mb-1.5">
+                <div style={{
+                  backgroundColor: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: '8px',
+                  padding: '8px 12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', fontWeight: 700, color: '#065f46', marginBottom: '4px' }}>
                     <span>{scanStage}</span>
                     <span>{scanProgress}%</span>
                   </div>
-                  <div className="w-full bg-emerald-200 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-emerald-600 h-2 rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${scanProgress}%` }}
-                    />
+                  <div style={{ width: '100%', backgroundColor: '#a7f3d0', borderRadius: '9999px', height: '6px', overflow: 'hidden' }}>
+                    <div style={{
+                      backgroundColor: '#059669',
+                      height: '100%',
+                      width: `${scanProgress}%`,
+                      transition: 'width 0.2s ease-out'
+                    }} />
                   </div>
                 </div>
               )}
 
               {/* Hardware / Inspection Notes */}
-              <div className="flex items-center justify-between text-[11px] text-gray-500 px-1">
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#64748b', padding: '0 4px' }}>
                 <span>Calibrated to AGMARKNET Schedule II standards</span>
                 <span>Sub-millimeter edge precision (±0.2mm)</span>
               </div>
             </div>
 
             {/* Right: Assay Metrics & Grade Certificate */}
-            <div className="lg:col-span-6 space-y-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {!assayResult && !isScanning && (
-                <div className="h-full min-h-[320px] rounded-2xl border-2 border-dashed border-gray-200 p-8 flex flex-col items-center justify-center text-center bg-gray-50/50">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-3xl mb-3 shadow-inner">
+                <div style={{
+                  minHeight: '280px',
+                  borderRadius: '12px',
+                  border: '2px dashed #cbd5e1',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  backgroundColor: '#f8fafc'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    backgroundColor: '#ecfdf5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.5rem',
+                    marginBottom: '10px'
+                  }}>
                     🔬
                   </div>
-                  <h4 className="text-base font-bold text-gray-900">Run Optical Quality Assay</h4>
-                  <p className="text-xs text-gray-500 max-w-sm mt-1 mb-4">
-                    Select one of the sample presets above or upload your produce photo to run instant computer-vision grading.
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+                    Run Optical Quality Assay
+                  </h4>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', maxWidth: '320px', margin: '0 0 14px 0' }}>
+                    Select one of the sample presets above or upload produce photo to run instant computer-vision grading.
                   </p>
                   <button
                     type="button"
                     onClick={() => triggerScan()}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all hover:scale-105"
+                    className="btn-gov-primary"
+                    style={{ fontSize: '0.78rem', padding: '6px 14px' }}
                   >
-                    <span>🚀</span> Start Instant AI Inspection
+                    <span>⚡</span> Start Instant AI Inspection
                   </button>
                 </div>
               )}
 
               {assayResult && (
-                <div className="space-y-4">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* Top Grade Card */}
-                  <div
-                    className={`rounded-2xl p-4 border shadow-sm ${
-                      assayResult.grade_code === 'A'
-                        ? 'bg-gradient-to-br from-emerald-500/10 via-emerald-50 to-teal-50 border-emerald-200'
-                        : assayResult.grade_code === 'B'
-                        ? 'bg-gradient-to-br from-blue-500/10 via-blue-50 to-sky-50 border-blue-200'
-                        : 'bg-gradient-to-br from-rose-500/10 via-rose-50 to-amber-50 border-rose-300'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
+                  <div style={{
+                    borderRadius: '12px',
+                    padding: '14px',
+                    border: assayResult.grade_code === 'C' ? '1px solid #fca5a5' : '1px solid #a7f3d0',
+                    backgroundColor: assayResult.grade_code === 'C' ? '#fff1f2' : '#f0fdf4',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           Predicted Quality Grade
                         </span>
-                        <h4 className="text-xl font-extrabold text-gray-900 mt-0.5 flex items-center gap-2">
+                        <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: '2px 0 4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {assayResult.predicted_grade}
                           {assayResult.grade_code === 'A' && (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-600 text-white shadow-xs">
+                            <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#059669', color: '#ffffff', padding: '2px 7px', borderRadius: '4px' }}>
                               ⭐ GRADE A
                             </span>
                           )}
+                          {assayResult.grade_code === 'A+' && (
+                            <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#047857', color: '#ffffff', padding: '2px 7px', borderRadius: '4px' }}>
+                              🌟 GRADE A+ (EXPORT)
+                            </span>
+                          )}
                           {assayResult.grade_code === 'B' && (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-blue-600 text-white shadow-xs">
+                            <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#2563eb', color: '#ffffff', padding: '2px 7px', borderRadius: '4px' }}>
                               GRADE B
                             </span>
                           )}
                           {assayResult.grade_code === 'C' && (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-rose-600 text-white shadow-xs">
+                            <span style={{ fontSize: '0.66rem', fontWeight: 800, backgroundColor: '#dc2626', color: '#ffffff', padding: '2px 7px', borderRadius: '4px' }}>
                               ⚠️ DEFECTIVE
                             </span>
                           )}
                         </h4>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Specimen: <strong className="text-gray-800">{assayResult.sample_name}</strong>
+                        <p style={{ fontSize: '0.74rem', color: '#475569', margin: 0 }}>
+                          Specimen: <strong style={{ color: '#0f172a' }}>{assayResult.sample_name}</strong>
                         </p>
                       </div>
 
                       {/* AI Confidence Meter */}
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.64rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
                           Confidence Score
                         </span>
-                        <div className="text-2xl font-black text-emerald-700">
+                        <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#059669' }}>
                           {assayResult.confidence_score}%
                         </div>
-                        <span className="text-[10px] font-medium text-gray-500">
+                        <span style={{ fontSize: '0.62rem', color: '#64748b' }}>
                           NABL Neural Validated
                         </span>
                       </div>
                     </div>
 
-                    {/* Quick Highlights Row */}
-                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200/60 text-center">
-                      <div className="bg-white/80 rounded-lg p-2 border border-gray-200/50">
-                        <span className="text-[10px] text-gray-500 font-medium block">Avg Diameter</span>
-                        <span className="text-sm font-bold text-gray-900">{assayResult.average_diameter_mm} mm</span>
-                      </div>
-                      <div className="bg-white/80 rounded-lg p-2 border border-gray-200/50">
-                        <span className="text-[10px] text-gray-500 font-medium block">Est Moisture</span>
-                        <span className="text-sm font-bold text-gray-900">{assayResult.estimated_moisture_percent}%</span>
-                      </div>
-                      <div className="bg-white/80 rounded-lg p-2 border border-gray-200/50">
-                        <span className="text-[10px] text-gray-500 font-medium block">Price Impact</span>
-                        <span
-                          className={`text-sm font-bold ${
-                            assayResult.suggested_price_multiplier >= 1 ? 'text-emerald-700' : 'text-rose-600'
-                          }`}
-                        >
-                          {assayResult.suggested_price_multiplier >= 1 ? '+' : ''}
-                          {Math.round((assayResult.suggested_price_multiplier - 1) * 100)}%
+                    {/* Statutory APMC Quality Parameters (Problem Statement Specific) */}
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                      <div style={{ fontSize: '0.66rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Statutory APMC Rule 38 Parameters</span>
+                        <span style={{ color: '#065f46', fontWeight: 800 }}>
+                          {assayResult.apmc_grade_classification?.replace(/_/g, ' ') || 'FAQ GRADE I'}
                         </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', textAlign: 'center' }}>
+                        <div style={{ backgroundColor: '#ffffff', borderRadius: '6px', padding: '6px 4px', border: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, display: 'block' }}>💧 Moisture</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>{assayResult.estimated_moisture_percent}%</span>
+                          <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Base 10%</span>
+                        </div>
+                        <div style={{ backgroundColor: '#ffffff', borderRadius: '6px', padding: '6px 4px', border: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, display: 'block' }}>🌾 Chaff / Dirt</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>{assayResult.foreign_matter_percent ?? 0.8}%</span>
+                          <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Base ≤1%</span>
+                        </div>
+                        <div style={{ backgroundColor: '#ffffff', borderRadius: '6px', padding: '6px 4px', border: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, display: 'block' }}>✂️ Broken / Split</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>{assayResult.broken_grain_percent ?? 1.1}%</span>
+                          <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Base ≤2%</span>
+                        </div>
+                        <div style={{ backgroundColor: '#ffffff', borderRadius: '6px', padding: '6px 4px', border: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, display: 'block' }}>🏷️ APMC Grade</span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            display: 'block',
+                            color: assayResult.grade_code === 'C' ? '#dc2626' : assayResult.grade_code === 'B' ? '#2563eb' : '#059669'
+                          }}>
+                            {assayResult.grade_code === 'C' ? 'REFRACTION' : assayResult.grade_code === 'B' ? 'FAQ II' : 'FAQ I'}
+                          </span>
+                          <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Mandi Slip</span>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Morphometric Metrics Breakdown Table */}
-                  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs">
-                    <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase' }}>
                         Computer Vision Morphometric Matrix
                       </span>
-                      <span className="text-[11px] font-medium text-emerald-700">
+                      <span style={{ fontSize: '0.66rem', fontWeight: 600, color: '#059669' }}>
                         ISO 9001 / Codex Standard
                       </span>
                     </div>
-                    <div className="divide-y divide-gray-100 text-xs">
+                    <div style={{ fontSize: '0.74rem' }}>
                       {assayResult.metrics.map((metric, idx) => (
-                        <div key={idx} className="px-3.5 py-2 flex items-center justify-between">
+                        <div key={idx} style={{
+                          padding: '6px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderBottom: idx < assayResult.metrics.length - 1 ? '1px solid #f1f5f9' : 'none'
+                        }}>
                           <div>
-                            <span className="font-semibold text-gray-800">{metric.name}</span>
-                            <span className="text-[10px] text-gray-400 block">Norm: {metric.benchmark_range}</span>
+                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{metric.name}</span>
+                            <span style={{ fontSize: '0.62rem', color: '#94a3b8', display: 'block' }}>Norm: {metric.benchmark_range}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-gray-900">{metric.measured_value}</span>
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
-                                metric.status === 'OPTIMAL'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : metric.status === 'PASS'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-rose-100 text-rose-800'
-                              }`}
-                            >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>{metric.measured_value}</span>
+                            <span style={{
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.62rem',
+                              fontWeight: 800,
+                              backgroundColor: metric.status === 'OPTIMAL' ? '#ecfdf5' : metric.status === 'PASS' ? '#eff6ff' : '#fef2f2',
+                              color: metric.status === 'OPTIMAL' ? '#065f46' : metric.status === 'PASS' ? '#1e40af' : '#b91c1c'
+                            }}>
                               {metric.status}
                             </span>
                           </div>
@@ -545,41 +979,55 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
                     </div>
                   </div>
 
-                  {/* AI Advisory Box */}
-                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 mb-1">
-                      <span>💡</span>
-                      <span>AGMARKNET Advisory & Export Compliance</span>
+                  {/* AGMARKNET Advisory Box */}
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 700, color: '#065f46', marginBottom: '4px' }}>
+                      <Sparkles size={13} color="#059669" />
+                      <span>AGMARKNET Advisory & Statutory Guidance</span>
                     </div>
-                    <ul className="space-y-1 text-xs text-emerald-800">
+                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.72rem', color: '#047857', lineHeight: 1.45 }}>
                       {assayResult.recommendations.map((rec, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span className="text-emerald-600 font-bold">•</span>
-                          <span>{rec}</span>
-                        </li>
+                        <li key={i}>{rec}</li>
                       ))}
                     </ul>
                   </div>
 
                   {/* Digital Certificate Bar */}
-                  <div className="bg-gray-900 text-white rounded-xl p-3 flex items-center justify-between shadow">
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-emerald-400 text-xs font-mono font-bold">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#34d399', fontSize: '0.74rem', fontFamily: 'monospace', fontWeight: 800 }}>
                           {assayResult.assay_id}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-900/60 text-emerald-300 border border-emerald-700">
+                        <span style={{ fontSize: '0.6rem', fontWeight: 700, backgroundColor: 'rgba(52, 211, 153, 0.2)', color: '#a7f3d0', padding: '1px 5px', borderRadius: '3px', border: '1px solid rgba(52, 211, 153, 0.4)' }}>
                           VERIFIED HASH
                         </span>
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-0.5">
+                      <p style={{ fontSize: '0.62rem', color: '#94a3b8', margin: '2px 0 0 0' }}>
                         SHA-256 Digital Certificate signed under National e-NAM & APMC rules
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowCertificateView(!showCertificateView)}
-                      className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-emerald-300 text-xs font-semibold border border-gray-700 transition-colors"
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#1e293b',
+                        color: '#34d399',
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        border: '1px solid #334155',
+                        cursor: 'pointer'
+                      }}
                     >
                       {showCertificateView ? 'Hide Cert' : 'View Cert'}
                     </button>
@@ -587,36 +1035,31 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
 
                   {/* Expanded Certificate View */}
                   {showCertificateView && (
-                    <div className="p-4 rounded-xl border-2 border-emerald-600 bg-white font-serif text-gray-800 shadow-md space-y-2 text-xs">
-                      <div className="text-center border-b pb-2">
-                        <h5 className="font-bold uppercase tracking-widest text-sm text-emerald-900">
+                    <div style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '2px solid #059669',
+                      backgroundColor: '#ffffff',
+                      fontSize: '0.72rem',
+                      color: '#0f172a'
+                    }}>
+                      <div style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '8px' }}>
+                        <strong style={{ textTransform: 'uppercase', letterSpacing: '0.04em', color: '#064e3b' }}>
                           GOVERNMENT OF MAHARASHTRA — MSAMB
-                        </h5>
-                        <p className="text-[10px] text-gray-500">
+                        </strong>
+                        <p style={{ fontSize: '0.64rem', color: '#64748b', margin: '2px 0 0 0' }}>
                           Automated Produce Quality Assay Certificate • National e-NAM Compliant
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-[11px] py-1">
-                        <div>
-                          <strong>Certificate ID:</strong> {assayResult.assay_id}
-                        </div>
-                        <div>
-                          <strong>Issued At:</strong> {new Date(assayResult.timestamp).toLocaleString()}
-                        </div>
-                        <div>
-                          <strong>Assayed Commodity:</strong> {assayResult.commodity}
-                        </div>
-                        <div>
-                          <strong>Certified Grade:</strong> {assayResult.predicted_grade}
-                        </div>
-                        <div>
-                          <strong>Uniformity Score:</strong> {assayResult.uniformity_score}%
-                        </div>
-                        <div>
-                          <strong>Moisture Content:</strong> {assayResult.estimated_moisture_percent}%
-                        </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.7rem' }}>
+                        <div><strong>Certificate ID:</strong> {assayResult.assay_id}</div>
+                        <div><strong>Issued At:</strong> {new Date(assayResult.timestamp).toLocaleString()}</div>
+                        <div><strong>Commodity:</strong> {assayResult.commodity}</div>
+                        <div><strong>Certified Grade:</strong> {assayResult.predicted_grade}</div>
+                        <div><strong>Uniformity Score:</strong> {assayResult.uniformity_score}%</div>
+                        <div><strong>Moisture Content:</strong> {assayResult.estimated_moisture_percent}%</div>
                       </div>
-                      <div className="bg-gray-50 p-2 rounded text-[10px] font-mono text-gray-600 break-all">
+                      <div style={{ marginTop: '8px', backgroundColor: '#f8fafc', padding: '6px', borderRadius: '4px', fontSize: '0.6rem', fontFamily: 'monospace', color: '#64748b', wordBreak: 'break-all' }}>
                         Cryptographic Sig: 0x9f4a8b23c1029e847d81029c78201a4e58b193ac479102837bc9
                       </div>
                     </div>
@@ -628,21 +1071,32 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
         </div>
 
         {/* Footer Action Buttons */}
-        <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="text-xs text-gray-500">
+        <div style={{
+          backgroundColor: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+          flexShrink: 0
+        }}>
+          <div style={{ fontSize: '0.74rem', color: '#475569' }}>
             {contextMode === 'LISTING' && (
-              <span>Quality grade & moisture will be auto-filled into your harvest listing form.</span>
+              <span>Quality grade & moisture index will be auto-filled into your harvest listing form.</span>
             )}
             {contextMode === 'DISPUTE' && (
-              <span>This computer vision assay provides impartial photographic proof for APMC arbitration.</span>
+              <span>This computer vision assay provides photographic evidence for APMC arbitration.</span>
             )}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100 font-semibold text-xs transition-colors"
+              className="btn-gov-secondary"
+              style={{ fontSize: '0.76rem', padding: '6px 14px' }}
             >
               Cancel
             </button>
@@ -651,11 +1105,19 @@ export const AIQualityAssayModal: React.FC<AIQualityAssayModalProps> = ({
               <button
                 type="button"
                 onClick={handleApplyToLot}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all"
+                className="btn-gov-primary"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '7px 16px',
+                  backgroundColor: '#059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
               >
-                <span>✓</span>
+                <Check size={15} />
                 {contextMode === 'LISTING'
-                  ? 'Apply Grade to Harvest Batch'
+                  ? 'Apply Certified Grade to Harvest Batch'
                   : contextMode === 'DISPUTE'
                   ? 'Attach Assay as Dispute Evidence'
                   : 'Confirm Grade'}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Scale, 
   CheckCircle2, 
@@ -8,6 +8,7 @@ import {
 import type { DigitalGatePass } from '../types';
 import { INITIAL_GATE_PASSES, computeWeighbridgeSettlement } from '../utils/gatePass';
 import { type Language } from '../utils/i18n';
+import { api } from '../services/api';
 
 interface WeighbridgeVerificationTerminalProps {
   onOpenGatePassModal: (pass: DigitalGatePass) => void;
@@ -20,8 +21,29 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
 }) => {
   const isMr = lang === 'MR';
   
+  // Gate passes loaded from Supabase
+  const [passes, setPasses] = useState<DigitalGatePass[]>(INITIAL_GATE_PASSES);
+  
   // Selected gate pass for active weighbridge processing
   const [selectedPass, setSelectedPass] = useState<DigitalGatePass>(INITIAL_GATE_PASSES[1]); // Default to gp-war-3021 (in progress)
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getDigitalGatePasses().then((data) => {
+      if (isMounted && data && data.length > 0) {
+        setPasses(data);
+        const active = data.find(p => p.id === 'gp-war-3021') || data[0];
+        setSelectedPass(active);
+        setGrossWeightKg(active.gross_weight_kg || 17200);
+        setTareWeightKg(active.tare_weight_kg || 9700);
+        setMoisturePct(active.tested_moisture_pct || 8.5);
+        setForeignMatterPct(active.tested_foreign_matter_pct || 1.2);
+        setDamagedPct(active.tested_damaged_pct || 1.0);
+        setIsSettlementComplete(active.status === 'PAYMENT_TRIGGERED');
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
   
   // Weighbridge live state inputs
   const [grossWeightKg, setGrossWeightKg] = useState<number>(selectedPass.gross_weight_kg || 17200);
@@ -77,6 +99,10 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
         gate_out_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       };
       setSelectedPass(updatedPass);
+      setPasses(prev => prev.map(p => p.id === updatedPass.id ? updatedPass : p));
+      api.updateDigitalGatePass(selectedPass.id, updatedPass).catch(err => {
+        console.warn('Failed to update gate pass in Supabase:', err);
+      });
     }, 1200);
   };
 
@@ -140,7 +166,7 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
 
         {/* Pass Switcher */}
         <div style={{ display: 'flex', gap: '8px' }}>
-          {INITIAL_GATE_PASSES.map((gp) => {
+          {passes.map((gp) => {
             const isSelected = selectedPass.id === gp.id;
             return (
               <button

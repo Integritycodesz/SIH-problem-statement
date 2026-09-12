@@ -13,6 +13,7 @@ import { TruckloadOptimizerModal } from './TruckloadOptimizerModal';
 import { DigitalGatePassModal } from './DigitalGatePassModal';
 import { WeighbridgeVerificationTerminal } from './WeighbridgeVerificationTerminal';
 import { PreHarvestForwardContractModal } from './PreHarvestForwardContractModal';
+import { AIQualityAssayModal } from './AIQualityAssayModal';
 import { calculateQualityRefraction, getCommodityRefractionSchedule } from '../utils/refraction';
 import { INITIAL_CONSIGNMENT_POOLS } from '../utils/logisticsOptimizer';
 import { INITIAL_GATE_PASSES } from '../utils/gatePass';
@@ -63,6 +64,7 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
   // Modals state
   const [scorecardModalOpen, setScorecardModalOpen] = useState<boolean>(false);
   const [activeScorecard, setActiveScorecard] = useState<BuyerReliabilityScorecard | null>(null);
+  const [isAssayModalOpen, setIsAssayModalOpen] = useState<boolean>(false);
 
   const [fulfillModalOpen, setFulfillModalOpen] = useState<boolean>(false);
   const [targetDemand, setTargetDemand] = useState<BuyerDemand | null>(null);
@@ -76,13 +78,13 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
   // Post Demand Modal state (for corporate buyers)
   const [postDemandModalOpen, setPostDemandModalOpen] = useState<boolean>(false);
   const [newCommodity, setNewCommodity] = useState<string>('Soybean');
-  const [newVariety, setNewVariety] = useState<string>('Yellow (JS-335 Solvent Grade)');
-  const [newVolume, setNewVolume] = useState<number | ''>(500);
-  const [newPrice, setNewPrice] = useState<number | ''>(5100);
+  const [newVariety, setNewVariety] = useState<string>('');
+  const [newVolume, setNewVolume] = useState<number | ''>('');
+  const [newPrice, setNewPrice] = useState<number | ''>('');
   const [newGrade, setNewGrade] = useState<string>('Grade A');
-  const [newMoisture, setNewMoisture] = useState<number | ''>(9.5);
-  const [newHub, setNewHub] = useState<string>('Nagpur MIDC Crushing Unit, Hingna');
-  const [newDeadline, setNewDeadline] = useState<string>('Sep 30, 2026');
+  const [newMoisture, setNewMoisture] = useState<number | ''>('');
+  const [newHub, setNewHub] = useState<string>('');
+  const [newDeadline, setNewDeadline] = useState<string>('');
   const [newNotes, setNewNotes] = useState<string>('');
   const [isPostingDemand, setIsPostingDemand] = useState<boolean>(false);
 
@@ -197,17 +199,19 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
     const qty = Number(commitQuantity);
     if (!qty || qty <= 0) return;
 
-    const effectiveUser: User = currentUser || {
-      id: 1,
-      name: 'Balasaheb Shinde (Farmer / FPO)',
-      phone: '+91-98220-11001',
-      role: 'FARMER',
-      district: 'Nashik',
-      state: 'Maharashtra',
-      kyc_verified: true,
-      rating: 4.85,
-      created_at: new Date().toISOString()
-    };
+    if (!currentUser) {
+      if (onRequireAuth) {
+        onRequireAuth(
+          isMarathi 
+            ? 'संस्थात्मक खरेदी मागणी पूर्ण करण्यासाठी कृपया प्रथम शेतकरी खात्यात लॉगिन करा.' 
+            : 'Please sign in as a verified farmer or FPO to commit produce against corporate demand.',
+          () => handleOpenFulfillModal(targetDemand)
+        );
+      } else {
+        alert(isMarathi ? 'कृपया प्रथम लॉगिन करा.' : 'Please sign in to commit produce.');
+      }
+      return;
+    }
 
     setIsFulfilling(true);
     try {
@@ -228,7 +232,7 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
         targetDemand.id,
         qty,
         targetDemand.target_price_per_quintal,
-        effectiveUser,
+        currentUser,
         Number(selectedLotId) || (targetDemand.id * 100),
         effectiveRefraction
       );
@@ -255,23 +259,26 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
 
   const handlePostDemandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveBuyer: User = currentUser || {
-      id: 101,
-      name: 'Nagpur Agro-Processing Oil Mills',
-      phone: '+91-98220-41001',
-      role: 'BUYER',
-      district: 'Nagpur',
-      state: 'Maharashtra',
-      kyc_verified: true,
-      rating: 4.95,
-      created_at: new Date().toISOString()
-    };
+    if (!currentUser) {
+      if (onRequireAuth) {
+        onRequireAuth(
+          isMarathi 
+            ? 'खरेदी मागणी प्रकाशित करण्यासाठी कृपया खरेदीदार खात्यात लॉगिन करा.' 
+            : 'Please sign in as an institutional buyer to publish procurement demand.',
+          () => setPostDemandModalOpen(true)
+        );
+      } else {
+        alert(isMarathi ? 'कृपया प्रथम खरेदीदार म्हणून लॉगिन करा.' : 'Please sign in as a verified Buyer to post procurement demands.');
+      }
+      return;
+    }
 
     setIsPostingDemand(true);
     try {
       const created = await api.createBuyerDemand({
-        buyer_id: effectiveBuyer.id,
-        buyer_name: effectiveBuyer.name,
+        buyer_id: currentUser.id,
+        buyer_name: currentUser.name,
+        company_name: currentUser.name,
         commodity: newCommodity,
         variety: newVariety,
         required_quantity_quintals: Number(newVolume),
@@ -573,8 +580,9 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
           {/* Phase 5 Forward Contracts Button */}
           <button
             type="button"
-            onClick={() => {
-              setActiveForwardOffer(INITIAL_FORWARD_CONTRACT_OFFERS[0]);
+            onClick={async () => {
+              const offers = await api.getForwardContractOffers();
+              setActiveForwardOffer(offers[0] || INITIAL_FORWARD_CONTRACT_OFFERS[0]);
               setForwardModalOpen(true);
             }}
             style={{
@@ -593,6 +601,29 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
           >
             <Sprout size={14} color="#16a34a" />
             <span>{isMarathi ? '🌱 पूर्व-हंगाम करार (Form C)' : '🌱 Forward Contracts (P5)'}</span>
+          </button>
+
+          {/* AI Optical Quality Assay Lab Button */}
+          <button
+            type="button"
+            onClick={() => setIsAssayModalOpen(true)}
+            style={{
+              backgroundColor: '#f5f3ff',
+              color: '#6d28d9',
+              border: '1px solid #ddd6fe',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            title="Computer Vision Grain Quality Assay"
+          >
+            <span>🔬</span>
+            <span>{isMarathi ? '🔬 एआय धान्य गुणवत्ता' : '🔬 AI Quality Lab (CV)'}</span>
           </button>
         </div>
       </div>
@@ -1647,7 +1678,16 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
         isOpen={forwardModalOpen}
         onClose={() => setForwardModalOpen(false)}
         offer={activeForwardOffer}
+        currentUser={currentUser}
         lang={lang}
+      />
+
+      {/* 11. MODAL: AI Optical Grain Quality Assay Lab */}
+      <AIQualityAssayModal
+        isOpen={isAssayModalOpen}
+        onClose={() => setIsAssayModalOpen(false)}
+        initialCommodity="Soybean"
+        contextMode="INSPECTION"
       />
 
     </div>

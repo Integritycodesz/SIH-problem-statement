@@ -570,7 +570,7 @@ export const TruckloadOptimizerModal: React.FC<TruckloadOptimizerModalProps> = (
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Ramesh Patil"
+                        placeholder={isMr ? "उदा. शेतकरी / एफपीओ नाव" : "Enter farmer / FPO name"}
                         value={newFarmerName}
                         onChange={(e) => setNewFarmerName(e.target.value)}
                         style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }}

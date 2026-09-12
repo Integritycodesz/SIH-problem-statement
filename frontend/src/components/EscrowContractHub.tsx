@@ -8,6 +8,7 @@ import { translations, type Language } from '../utils/i18n';
 import { QualityRefractionModal } from './QualityRefractionModal';
 import { DigitalGatePassModal } from './DigitalGatePassModal';
 import { TruckloadOptimizerModal } from './TruckloadOptimizerModal';
+import { APMCJFormModal } from './APMCJFormModal';
 import { INITIAL_GATE_PASSES } from '../utils/gatePass';
 
 interface EscrowContractHubProps {
@@ -31,7 +32,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   const [refractionModalOpen, setRefractionModalOpen] = useState<boolean>(false);
   const [gatePassModalOpen, setGatePassModalOpen] = useState<boolean>(false);
   const [truckloadModalOpen, setTruckloadModalOpen] = useState<boolean>(false);
-  const [rolePerspective, setRolePerspective] = useState<'AUTO' | 'FARMER' | 'BUYER' | 'ADMIN'>('AUTO');
+  const [jFormModalOpen, setJFormModalOpen] = useState<boolean>(false);
   const [contractLogistics, setContractLogistics] = useState<LogisticsBooking | null>(null);
 
   useEffect(() => {
@@ -154,7 +155,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   };
 
   // Determine active operating persona
-  const activeRole = rolePerspective === 'AUTO' ? (currentUser?.role || 'FARMER') : rolePerspective;
+  const activeRole = currentUser?.role || 'FARMER';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
@@ -183,55 +184,6 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Persona Role Switcher for seamless evaluation */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
-            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{lang === 'MR' ? 'भूमिका नियंत्रण:' : 'Perspective:'}</span>
-            <button 
-              onClick={() => setRolePerspective('FARMER')}
-              style={{ 
-                border: 'none', 
-                padding: '3px 8px', 
-                borderRadius: '4px', 
-                fontSize: '0.72rem', 
-                fontWeight: activeRole === 'FARMER' ? 700 : 500,
-                backgroundColor: activeRole === 'FARMER' ? '#059669' : 'transparent',
-                color: activeRole === 'FARMER' ? '#fff' : '#475569',
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'MR' ? 'शेतकरी' : 'Farmer'}
-            </button>
-            <button 
-              onClick={() => setRolePerspective('BUYER')}
-              style={{ 
-                border: 'none', 
-                padding: '3px 8px', 
-                borderRadius: '4px', 
-                fontSize: '0.72rem', 
-                fontWeight: activeRole === 'BUYER' ? 700 : 500,
-                backgroundColor: activeRole === 'BUYER' ? '#2563eb' : 'transparent',
-                color: activeRole === 'BUYER' ? '#fff' : '#475569',
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'MR' ? 'खरेदीदार' : 'Buyer'}
-            </button>
-            <button 
-              onClick={() => setRolePerspective('ADMIN')}
-              style={{ 
-                border: 'none', 
-                padding: '3px 8px', 
-                borderRadius: '4px', 
-                fontSize: '0.72rem', 
-                fontWeight: activeRole === 'ADMIN' ? 700 : 500,
-                backgroundColor: activeRole === 'ADMIN' ? '#d97706' : 'transparent',
-                color: activeRole === 'ADMIN' ? '#fff' : '#475569',
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'MR' ? 'लवाद / अधिकारी' : 'Officer'}
-            </button>
-          </div>
 
           <span style={{ 
             backgroundColor: '#ecfdf5', 
@@ -499,7 +451,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Farmer Sign Button */}
-                {!selectedContract.farmer_signed && (activeRole === 'FARMER' || activeRole === 'ADMIN') && (
+                {!selectedContract.farmer_signed && (activeRole === 'FARMER' || activeRole === 'FPO' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -511,7 +463,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Buyer Sign Button */}
-                {!selectedContract.buyer_signed && (activeRole === 'BUYER' || activeRole === 'ADMIN') && (
+                {!selectedContract.buyer_signed && (activeRole === 'BUYER' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -523,7 +475,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Buyer Lock Advance Button */}
-                {selectedContract.farmer_signed && selectedContract.buyer_signed && selectedContract.escrow?.advance_status === 'UNPAID' && (activeRole === 'BUYER' || activeRole === 'ADMIN') && (
+                {selectedContract.farmer_signed && selectedContract.buyer_signed && selectedContract.escrow?.advance_status === 'UNPAID' && (activeRole === 'BUYER' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -535,7 +487,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Farmer Dispatch Button */}
-                {selectedContract.escrow?.advance_status === 'HELD_IN_ESCROW' && selectedContract.status === 'ADVANCE_ESCROW_LOCKED' && (activeRole === 'FARMER' || activeRole === 'ADMIN') && (
+                {selectedContract.escrow?.advance_status === 'HELD_IN_ESCROW' && selectedContract.status === 'ADVANCE_ESCROW_LOCKED' && (activeRole === 'FARMER' || activeRole === 'FPO' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -547,7 +499,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Buyer Delivery Inspection Button */}
-                {selectedContract.status === 'IN_TRANSIT' && (activeRole === 'BUYER' || activeRole === 'ADMIN') && (
+                {selectedContract.status === 'IN_TRANSIT' && (activeRole === 'BUYER' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -559,7 +511,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 )}
 
                 {/* Buyer Release Final Balance Button */}
-                {selectedContract.status === 'DELIVERED_PENDING_INSPECTION' && (activeRole === 'BUYER' || activeRole === 'ADMIN') && (
+                {selectedContract.status === 'DELIVERED_PENDING_INSPECTION' && (activeRole === 'BUYER' || activeRole === 'OFFICIAL') && (
                   <button 
                     className="btn-gov-primary" 
                     disabled={actionLoading}
@@ -572,11 +524,25 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
 
                 {/* Completed Banner */}
                 {selectedContract.status === 'COMPLETED' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#065f46', fontWeight: 700, fontSize: '0.84rem' }}>
-                    <CheckCircle2 size={16} />
-                    {lang === 'MR' 
-                      ? '१००% करार यशस्वीरीत्या पूर्ण झाला असून दोन्ही एस्क्रो टप्पे वितरित झाले आहेत.'
-                      : 'Contract 100% completed & full escrow successfully distributed to farmer account.'}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', width: '100%', backgroundColor: '#ecfdf5', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid #a7f3d0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46', fontWeight: 700, fontSize: '0.84rem' }}>
+                      <CheckCircle2 size={18} color="#059669" />
+                      <div>
+                        <div>{lang === 'MR' ? '१००% करार यशस्वीरीत्या पूर्ण झाला असून दोन्ही एस्क्रो टप्पे वितरित झाले आहेत.' : 'Contract 100% completed & full escrow successfully distributed.'}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 500 }}>
+                          {lang === 'MR' ? 'महाराष्ट्र कृषी उत्पन्न खरेदी-विक्री नियम २४ अंतर्गत जे-फॉर्म उपलब्ध.' : 'Statutory APMC Form J (Rule 24) generated & DBT reconciled.'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setJFormModalOpen(true)}
+                      className="btn-gov-primary"
+                      style={{ fontSize: '0.78rem', padding: '7px 14px', backgroundColor: '#831843', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                    >
+                      <FileText size={14} />
+                      {lang === 'MR' ? 'अधिकृत जे-फॉर्म (विक्री पावती)' : 'View Statutory Form J (विक्री पावती)'}
+                    </button>
                   </div>
                 )}
               </div>
@@ -627,6 +593,16 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
                 >
                   <Truck size={13} color="#2563eb" />
                   <span>{lang === 'MR' ? 'वाहतूक बिल्टी' : 'Truck Bilty'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-gov-secondary"
+                  onClick={() => setJFormModalOpen(true)}
+                  style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#fdf2f8', color: '#9d174d', border: '1px solid #fbcfe8', fontWeight: 600 }}
+                >
+                  <FileText size={13} color="#db2777" />
+                  <span>{lang === 'MR' ? 'APMC जे-फॉर्म (विक्री पावती)' : 'APMC Form J (विक्री पावती)'}</span>
                 </button>
               </div>
             </div>
@@ -687,6 +663,17 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
         destinationHub={selectedContract?.delivery_address || 'Nagpur Hingna Industrial Area'}
         lang={lang}
       />
+
+      {/* Statutory APMC Form J (विक्री पावती / Rule 24) Modal */}
+      {selectedContract && (
+        <APMCJFormModal
+          isOpen={jFormModalOpen}
+          onClose={() => setJFormModalOpen(false)}
+          contractId={selectedContract.id}
+          contract={selectedContract}
+          lang={lang}
+        />
+      )}
     </div>
   );
 };

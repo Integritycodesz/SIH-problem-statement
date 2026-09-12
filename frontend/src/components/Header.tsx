@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Bell, ChevronDown, Check, ShieldCheck, 
-  User as UserIcon, Zap, CheckCheck, Lock, LogOut, Building2
+  User as UserIcon, Zap, CheckCheck, Lock, LogOut, Building2,
+  Mic, Sparkles
 } from 'lucide-react';
 import { api, type User, type AgriNotification } from '../services/api';
 import { isSupabaseConfigured, subscribeToCommodityPrices } from '../services/supabase';
@@ -23,26 +24,28 @@ interface LiveTickerItem {
 
 interface HeaderProps {
   currentUser: User | null;
-  allUsers: User[];
-  onSelectUser: (user: User) => void;
+  allUsers?: User[];
+  onSelectUser?: (user: User) => void;
   activeTab: string;
   onSelectTab: (tab: string) => void;
   lang: Language;
   onSelectLang: (lang: Language) => void;
   onOpenAuthModal: () => void;
   onLogout: () => void;
+  onOpenVoiceModal?: () => void;
+  onOpenQualityModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
-  allUsers,
-  onSelectUser,
   activeTab,
   onSelectTab,
   lang,
   onSelectLang,
   onOpenAuthModal,
   onLogout,
+  onOpenVoiceModal,
+  onOpenQualityModal,
 }) => {
   const [showRoleDropdown, setShowRoleDropdown] = useState<boolean>(false);
   const [showNotifDrawer, setShowNotifDrawer] = useState<boolean>(false);
@@ -466,7 +469,59 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Controls: Language, Interactive Notification Bell & User Profile Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          
+          {/* SIH AI Button 1: Kisan Voice Assistant */}
+          {onOpenVoiceModal && (
+            <button
+              type="button"
+              onClick={onOpenVoiceModal}
+              style={{
+                backgroundColor: '#064e3b',
+                color: '#ffffff',
+                border: '1px solid #34d399',
+                borderRadius: '20px',
+                padding: '5px 12px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)'
+              }}
+              title={lang === 'MR' ? 'किसान व्हॉइस एआय - आवाजाने बाजारभाव व हमीभाव विचारा' : 'Kisan Voice AI - Speak in Marathi, Hindi, or English'}
+            >
+              <Mic size={14} color="#34d399" />
+              <span>{lang === 'MR' ? '🎙️ शेतकरी आवाज' : '🎙️ Kisan Voice AI'}</span>
+            </button>
+          )}
+
+          {/* SIH AI Button 2: Computer Vision Quality Lab */}
+          {onOpenQualityModal && (
+            <button
+              type="button"
+              onClick={onOpenQualityModal}
+              style={{
+                backgroundColor: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                borderRadius: '20px',
+                padding: '5px 11px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+              title={lang === 'MR' ? 'गुणवत्ता तपासणी लॅब - फोटोवरून ग्रेड व आर्द्रता मोजा' : 'AI Optical Quality Assay Lab'}
+            >
+              <Sparkles size={13} color="#2563eb" />
+              <span>{lang === 'MR' ? '🔬 गुणवत्ता लॅब' : '🔬 AI Quality Lab'}</span>
+            </button>
+          )}
+
           {/* Language Toggle */}
           <div style={{ 
             display: 'flex', 
@@ -689,136 +744,93 @@ export const Header: React.FC<HeaderProps> = ({
                 <ChevronDown size={14} color="#64748b" />
               </div>
 
-              {/* Dropdown for Personas & Sign Out */}
+              {/* User Profile & Sign Out Dropdown */}
               {showRoleDropdown && (
                 <div style={{
                   position: 'absolute',
                   top: '100%',
                   right: 0,
                   marginTop: '6px',
-                  width: '280px',
+                  width: '250px',
                   backgroundColor: '#ffffff',
                   border: '1px solid var(--border-card)',
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-lg)',
-                  padding: '8px',
+                  padding: '12px',
                   zIndex: 50
                 }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', padding: '4px 8px 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {lang === 'MR' ? 'भूमिका बदला (RBAC चाचणी):' : 'Switch Persona (RBAC Testing):'}
-                  </div>
-
-                  {/* Section: Farmers */}
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', padding: '4px 8px', textTransform: 'uppercase' }}>
-                    👨‍🌾 {lang === 'MR' ? 'शेतकरी / FPO गट' : 'Farmers & FPOs'}
-                  </div>
-                  {allUsers.filter(u => u.role === 'FARMER' || u.role === 'FPO').slice(0, 3).map((u) => (
-                    <div
-                      key={u.id}
-                      onClick={() => {
-                        onSelectUser(u);
-                        setShowRoleDropdown(false);
-                      }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        backgroundColor: currentUser.id === u.id ? '#ecfdf5' : 'transparent',
-                        marginBottom: '2px'
-                      }}
-                    >
-                      <UserIcon size={13} color={currentUser.id === u.id ? '#059669' : '#64748b'} />
-                      <div style={{ fontSize: '0.76rem' }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.district}</div>
+                  {/* Active User Details */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      backgroundColor: rolePerms.badgeBg,
+                      color: rolePerms.badgeColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '0.95rem',
+                      flexShrink: 0
+                    }}>
+                      {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <div style={{ overflow: 'hidden', textAlign: 'left' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        {currentUser.name}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: rolePerms.badgeColor, fontWeight: 600 }}>
+                        {lang === 'MR' ? rolePerms.titleMr : rolePerms.titleEn}
                       </div>
                     </div>
-                  ))}
-
-                  {/* Section: Corporate Buyers */}
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#2563eb', padding: '6px 8px 4px', textTransform: 'uppercase', borderTop: '1px solid #f1f5f9', marginTop: '4px' }}>
-                    🏢 {lang === 'MR' ? 'संस्थात्मक खरेदीदार' : 'Corporate Buyers'}
                   </div>
-                  {allUsers.filter(u => u.role === 'BUYER').slice(0, 2).map((u) => (
-                    <div
-                      key={u.id}
-                      onClick={() => {
-                        onSelectUser(u);
-                        setShowRoleDropdown(false);
-                      }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        backgroundColor: currentUser.id === u.id ? '#eff6ff' : 'transparent',
-                        marginBottom: '2px'
-                      }}
-                    >
-                      <UserIcon size={13} color={currentUser.id === u.id ? '#2563eb' : '#64748b'} />
-                      <div style={{ fontSize: '0.76rem' }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.district}</div>
-                      </div>
-                    </div>
-                  ))}
 
-                  {/* Section: Official Arbiters */}
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#d97706', padding: '6px 8px 4px', textTransform: 'uppercase', borderTop: '1px solid #f1f5f9', marginTop: '4px' }}>
-                    ⚖️ {lang === 'MR' ? 'बाजार समिती लवाद अधिकारी' : 'APMC Mandi Arbiter'}
+                  {/* Profile Metadata */}
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '12px' }}>
+                    {currentUser.district && (
+                      <div>📍 {currentUser.district}, {currentUser.state || 'Maharashtra'}</div>
+                    )}
+                    {currentUser.phone && (
+                      <div>📱 {currentUser.phone}</div>
+                    )}
+                    {currentUser.email && (
+                      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>✉️ {currentUser.email}</div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+                      <ShieldCheck size={13} />
+                      <span>{lang === 'MR' ? 'केवायसी प्रमाणित खाते' : 'KYC Verified Account'}</span>
+                    </div>
                   </div>
-                  {allUsers.filter(u => u.role === 'OFFICIAL').map((u) => (
-                    <div
-                      key={u.id}
-                      onClick={() => {
-                        onSelectUser(u);
-                        setShowRoleDropdown(false);
-                      }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        backgroundColor: currentUser.id === u.id ? '#fef3c7' : 'transparent',
-                        marginBottom: '2px'
-                      }}
-                    >
-                      <UserIcon size={13} color={currentUser.id === u.id ? '#d97706' : '#64748b'} />
-                      <div style={{ fontSize: '0.76rem' }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>APMC State Arbiter</div>
-                      </div>
-                    </div>
-                  ))}
 
-                  <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '6px', paddingTop: '6px' }}>
-                    <div
+                  {/* Sign Out Action */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                    <button
+                      type="button"
                       onClick={() => {
                         setShowRoleDropdown(false);
                         onLogout();
                       }}
                       style={{
-                        padding: '6px 8px',
+                        width: '100%',
+                        padding: '8px 12px',
                         borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        color: '#dc2626'
+                        justifyContent: 'center',
+                        gap: '6px',
+                        color: '#dc2626',
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      <LogOut size={13} />
-                      <span style={{ fontSize: '0.76rem', fontWeight: 600 }}>
-                        {lang === 'MR' ? 'लॉग आऊट' : 'Sign Out'}
-                      </span>
-                    </div>
+                      <LogOut size={14} />
+                      <span>{lang === 'MR' ? 'लॉग आऊट करा' : 'Sign Out'}</span>
+                    </button>
                   </div>
                 </div>
               )}

@@ -7,12 +7,15 @@ import {
   Globe, RefreshCw, Download, Key, CheckCircle2, Building2, X,
   Scale, AlertTriangle, Volume2, VolumeX, Sparkles, Send,
   Compass, Tag, Zap, Users, Warehouse, Layers, Percent,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Snowflake, Plus
 } from 'lucide-react';
 import { subscribeToCommodityPrices } from '../services/supabase';
-import { api, type CommodityPrice, type GovMandiRecord, type CACPMSPRecord } from '../services/api';
+import { api, type CommodityPrice, type GovMandiRecord, type CACPMSPRecord, type ProduceLot } from '../services/api';
 import type { StorageFacility } from '../types';
+import { ENWRPledgeLoanModal } from './ENWRPledgeLoanModal';
+import { StorageBookingModal } from './StorageBookingModal';
 import { translations, type Language } from '../utils/i18n';
+import { calculateAgriculturalHoldVsSellForecast, CROP_PRESERVATION_DATABASE } from '../utils/agriculturalPreservationForecaster';
 
 interface MandiIntelligenceProps {
   lang?: Language;
@@ -53,14 +56,35 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   // Storage & Hold vs Sell Decision Engine State
   const [storageFacilities, setStorageFacilities] = useState<StorageFacility[]>([]);
   const [selectedStorageDistrict, setSelectedStorageDistrict] = useState<string>('All');
+  const [selectedStorageType, setSelectedStorageType] = useState<'ALL' | 'COLD_STORAGE' | 'WDRA_GODOWN'>('ALL');
+  const [selectedFacilityForBooking, setSelectedFacilityForBooking] = useState<StorageFacility | null>(null);
+  const [showStorageBookingModal, setShowStorageBookingModal] = useState<boolean>(false);
   const [holdDays, setHoldDays] = useState<number>(30);
+  const [selectedScenario, setSelectedScenario] = useState<'BEARISH' | 'BASE_EXPECTED' | 'BULLISH'>('BASE_EXPECTED');
   const [storageInquirySuccess, setStorageInquirySuccess] = useState<string | null>(null);
+
+  // Pre-Harvest Simulator vs. Live Listed Lot Mode
+  const [engineMode, setEngineMode] = useState<'SIMULATOR' | 'LISTED_LOT'>('SIMULATOR');
+  const [userLots, setUserLots] = useState<ProduceLot[]>([]);
+  const [selectedLotId, setSelectedLotId] = useState<number | null>(null);
+  const [simulatorCrop, setSimulatorCrop] = useState<string>('Onion');
+  const [simulatorQty, setSimulatorQty] = useState<number>(50);
 
   useEffect(() => {
     api.getStorageFacilities().then(data => {
       setStorageFacilities(data);
     }).catch(() => null);
-  }, []);
+
+    api.getLots().then(allLots => {
+      setUserLots(allLots);
+      if (allLots.length > 0) {
+        const matching = currentUser 
+          ? (allLots.find(l => l.farmer_id === currentUser.id || l.farmer_name === currentUser.name) || allLots[0])
+          : allLots[0];
+        setSelectedLotId(matching.id);
+      }
+    }).catch(() => null);
+  }, [currentUser]);
 
   // Transport Calculator State
   const [harvestQty, setHarvestQty] = useState<number>(50);
@@ -139,6 +163,20 @@ export const MandiIntelligence: React.FC<MandiIntelligenceProps> = ({
   const [govPageSize, setGovPageSize] = useState<number>(15);
   const [exchangeCurrentPage, setExchangeCurrentPage] = useState<number>(1);
   const [exchangePageSize, setExchangePageSize] = useState<number>(15);
+
+  // e-NWR Pledge Loan Financing Modal State
+  const [showENWRModal, setShowENWRModal] = useState<boolean>(false);
+  const [enwrPrefillData, setEnwrPrefillData] = useState<{
+    commodity: string;
+    quantity: number;
+    price: number;
+    warehouseName?: string;
+  }>({
+    commodity: 'Soybean',
+    quantity: 120,
+    price: 4900,
+    warehouseName: 'Maharashtra State Warehousing Corp (MSWC) Latur Hub'
+  });
 
   // Helper for accurate chronological comparison of DD/MM/YYYY and ISO dates
   const parseDateToTimestamp = (dStr: string): number => {
@@ -3668,6 +3706,196 @@ https://agroconnect.gov.in`;
 
       {/* 5.5 "Hold vs. Sell" Sale-Window Decision Engine */}
       <div className="gov-card" style={{ padding: '24px', backgroundColor: '#ffffff' }}>
+        {/* Mode Switcher Bar */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setEngineMode('SIMULATOR')}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '6px',
+              border: engineMode === 'SIMULATOR' ? '2px solid #059669' : '1px solid #cbd5e1',
+              backgroundColor: engineMode === 'SIMULATOR' ? '#ecfdf5' : '#ffffff',
+              color: engineMode === 'SIMULATOR' ? '#065f46' : '#475569',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Sparkles size={14} />
+            {lang === 'MR' ? 'कापणीपूर्व नियोजन सिम्युलेटर (What-If)' : 'Pre-Harvest Scenario Simulator (What-If)'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setEngineMode('LISTED_LOT')}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '6px',
+              border: engineMode === 'LISTED_LOT' ? '2px solid #0284c7' : '1px solid #cbd5e1',
+              backgroundColor: engineMode === 'LISTED_LOT' ? '#f0f9ff' : '#ffffff',
+              color: engineMode === 'LISTED_LOT' ? '#0369a1' : '#475569',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Layers size={14} />
+            {lang === 'MR' ? `नोंदणी केलेला प्रत्यक्ष शेतमाल (${userLots.length})` : `Evaluate My Listed Lot (${userLots.length} Active)`}
+          </button>
+        </div>
+
+        {/* Mode Setup & Parameter Controls */}
+        {engineMode === 'SIMULATOR' ? (
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.72rem', backgroundColor: '#dcfce7', color: '#166534', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                  {lang === 'MR' ? 'काल्पनिक / पूर्व-नियोजन पद्धत' : 'WHAT-IF PRE-HARVEST SIMULATION'}
+                </span>
+                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                  {lang === 'MR' ? 'कोणताही शेतमाल नोंदवणे आवश्यक नाही' : 'No lot listing required'}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '3px' }}>
+                {lang === 'MR'
+                  ? 'कापणीपूर्वी शेतमाल लगेच विकावा की साठवून ठेवावा याचे अंदाजपत्रक तयार करण्यासाठी पीक आणि अपेक्षित उत्पादन निवडा.'
+                  : 'Evaluate market price appreciation, physical drying shrinkage (driage), and carrying costs across 15 to 90 days before harvesting.'}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#334155' }}>
+                  {lang === 'MR' ? 'पीक:' : 'Crop:'}
+                </label>
+                <select
+                  value={simulatorCrop}
+                  onChange={e => setSimulatorCrop(e.target.value)}
+                  style={{ padding: '5px 10px', fontSize: '0.78rem', borderRadius: '5px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontWeight: 600 }}
+                >
+                  {Object.keys(CROP_PRESERVATION_DATABASE).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#334155' }}>
+                  {lang === 'MR' ? 'अपेक्षित उत्पादन:' : 'Expected Qty:'}
+                </label>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {[25, 50, 100, 200].map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setSimulatorQty(q)}
+                      style={{
+                        padding: '3px 8px',
+                        fontSize: '0.72rem',
+                        borderRadius: '4px',
+                        border: simulatorQty === q ? '1px solid #059669' : '1px solid #cbd5e1',
+                        backgroundColor: simulatorQty === q ? '#ecfdf5' : '#ffffff',
+                        color: simulatorQty === q ? '#065f46' : '#475569',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {q}Q
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  value={simulatorQty}
+                  onChange={e => setSimulatorQty(Math.max(1, Number(e.target.value) || 1))}
+                  style={{ width: '65px', padding: '4px 6px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                  min="1"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px' }}>
+            {userLots.length > 0 ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', backgroundColor: '#0284c7', color: '#ffffff', fontWeight: 800, padding: '2px 7px', borderRadius: '4px' }}>
+                      {lang === 'MR' ? 'प्रत्यक्ष नोंदणीकृत शेतमाल' : 'EVALUATING ACTIVE PRODUCE LOT'}
+                    </span>
+                    <span style={{ fontSize: '0.74rem', color: '#0369a1', marginLeft: '8px', fontWeight: 600 }}>
+                      {lang === 'MR' ? 'तुमच्या शेतमालाच्या प्रत्यक्ष प्रमाणावर आधारित सल्ला' : 'Advisory tailored to your actual listed batch specifications'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#0369a1' }}>
+                      {lang === 'MR' ? 'लॉट निवडा:' : 'Select Lot:'}
+                    </label>
+                    <select
+                      value={selectedLotId || (userLots[0]?.id ?? '')}
+                      onChange={e => setSelectedLotId(Number(e.target.value))}
+                      style={{ padding: '6px 10px', fontSize: '0.78rem', borderRadius: '5px', border: '1px solid #7dd3fc', backgroundColor: '#ffffff', fontWeight: 700, color: '#0f172a' }}
+                    >
+                      {userLots.map(l => (
+                        <option key={l.id} value={l.id}>
+                          Lot #{l.id}: {l.commodity} ({l.variety || l.quality_grade}) — {l.quantity_quintals} Qtl @ ₹{l.base_price_per_quintal}/qtl ({l.mandi_name || l.district})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {(() => {
+                  const activeLot = userLots.find(l => l.id === (selectedLotId || userLots[0]?.id));
+                  if (!activeLot) return null;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e0f2fe', fontSize: '0.74rem' }}>
+                      <span><strong>Lot #{activeLot.id}:</strong> {activeLot.commodity} ({activeLot.variety})</span>
+                      <span>Volume: <strong style={{ color: '#0284c7' }}>{activeLot.quantity_quintals} Qtl</strong></span>
+                      <span>Asking Rate: <strong style={{ color: '#059669' }}>₹{activeLot.base_price_per_quintal}/qtl</strong></span>
+                      <span>Grade: <strong>{activeLot.quality_grade}</strong> ({activeLot.moisture_percent}% moisture)</span>
+                      <span>Mandi Hub: <strong>{activeLot.mandi_name || activeLot.district}</strong></span>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0369a1' }}>
+                    {lang === 'MR' ? 'सध्या कोणताही शेतमाल नोंदवलेला नाही' : 'No Harvest Lots Currently Listed in Your Account'}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '2px' }}>
+                    {lang === 'MR'
+                      ? 'थेट खरेदीदारांकडून स्पर्धात्मक भाव आणि लॉट-विशिष्ट साठवणूक सल्ला मिळवण्यासाठी शेतमाल नोंदवा.'
+                      : 'List a harvest batch in the Farmer Portal to unlock lot-specific preservation forecasts, or switch to the Pre-Harvest Simulator mode above.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-gov-primary"
+                  onClick={() => {
+                    if (onListProduce) {
+                      onListProduce({ commodity: simulatorCrop, price: 2450 });
+                    }
+                  }}
+                  style={{ fontSize: '0.75rem', padding: '6px 12px', backgroundColor: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={13} /> {lang === 'MR' ? 'नवीन शेतमाल नोंदवा' : 'List a Lot Now'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '18px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -3679,64 +3907,161 @@ https://agroconnect.gov.in`;
               </span>
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              "Hold vs. Sell" Sale-Window Engine ({calcCommodity})
+              {engineMode === 'SIMULATOR'
+                ? `"Hold vs. Sell" Pre-Harvest Scenario Simulator (${simulatorCrop})`
+                : `"Hold vs. Sell" Active Lot Evaluation (${userLots.find(l => l.id === selectedLotId)?.commodity || simulatorCrop})`}
             </h3>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '3px 0 0' }}>
-              Compare financial returns of selling immediately in today's APMC spot market vs. storing produce in a WDRA godown for off-season premium realization.
+              {engineMode === 'SIMULATOR'
+                ? (lang === 'MR'
+                    ? 'कापणीपूर्वी शेतमाल लगेच विकावा की शासकीय गोदामात साठवून ठेवावा याचे अंदाजपत्रक (What-If Analysis). कोणताही शेतमाल नोंदवणे आवश्यक नाही.'
+                    : 'Compare financial returns of selling immediately in today\'s APMC spot market vs. storing produce in a WDRA godown for off-season premium realization.')
+                : (lang === 'MR'
+                    ? 'नोंदणी केलेल्या प्रत्यक्ष शेतमालाच्या प्रमाणावर आधारित साठवणूक सल्ला, वजन घट आणि ७०% शासकीय गोदाम कर्ज (e-NWR) पर्याय.'
+                    : 'Lot-Specific Advisory: Compare returns of immediate spot sale vs. holding your actual listed batch in WDRA storage.')}
             </p>
           </div>
 
-          {/* Hold Duration Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#475569' }}>Hold Duration:</span>
-            {[15, 30, 45, 60].map(days => (
-              <button
-                key={days}
-                type="button"
-                onClick={() => setHoldDays(days)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 'var(--radius-full)',
-                  border: holdDays === days ? '1px solid #059669' : '1px solid #cbd5e1',
-                  backgroundColor: holdDays === days ? '#ecfdf5' : '#ffffff',
-                  color: holdDays === days ? '#065f46' : '#64748b',
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                {days} Days
-              </button>
-            ))}
+          {/* Hold Duration & Scenario Selectors */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                {lang === 'MR' ? 'अंदाज परिस्थिती (Scenario):' : 'Forecast Scenario:'}
+              </span>
+              {(['BEARISH', 'BASE_EXPECTED', 'BULLISH'] as const).map(sc => {
+                const isSelected = selectedScenario === sc;
+                const label = sc === 'BEARISH' 
+                  ? (lang === 'MR' ? '📉 मंदी (P10)' : '📉 Bearish (P10)')
+                  : sc === 'BULLISH'
+                  ? (lang === 'MR' ? '🚀 तेजी (P90)' : '🚀 Bullish (P90)')
+                  : (lang === 'MR' ? '🎯 अपेक्षित (P50)' : '🎯 Expected (P50)');
+                return (
+                  <button
+                    key={sc}
+                    type="button"
+                    onClick={() => setSelectedScenario(sc)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                      backgroundColor: isSelected ? '#0f172a' : '#f8fafc',
+                      color: isSelected ? '#ffffff' : '#475569',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                {lang === 'MR' ? 'साठवणूक कालावधी:' : 'Hold Duration:'}
+              </span>
+              {[15, 30, 45, 60, 90].map(days => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setHoldDays(days)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-full)',
+                    border: holdDays === days ? '1px solid #059669' : '1px solid #cbd5e1',
+                    backgroundColor: holdDays === days ? '#ecfdf5' : '#ffffff',
+                    color: holdDays === days ? '#065f46' : '#64748b',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {days} {lang === 'MR' ? 'दिवस' : 'Days'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Financial Payoff Comparison Grid */}
+        {/* Scientific Agricultural Preservability & Driage Forecast Engine */}
         {(() => {
-          const spotRate = currentCalcMandi?.modal_price || 2450;
-          const isPerishable = ['Tomato', 'Spinach', 'Cabbage', 'Cauliflower'].some(p => calcCommodity.toLowerCase().includes(p.toLowerCase()));
-          
-          // Projected seasonal appreciation percentage
-          const appreciationPct = isPerishable ? -12 : (holdDays === 15 ? 8.5 : holdDays === 30 ? 17.5 : holdDays === 45 ? 24.0 : 29.5);
-          const projectedFuturePrice = Math.round(spotRate * (1 + appreciationPct / 100));
-          
-          // Storage cost: ₹0.85/qtl/day
-          const storageRentPerQtl = Number((0.85 * holdDays).toFixed(2));
-          const handlingAndInsurance = 12.0; // ₹12/qtl
-          const totalHoldingCostPerQtl = storageRentPerQtl + handlingAndInsurance;
-          
-          // Net Realization (accurately derived from transport & mandi handling calculator)
-          const transportCessPerQtl = grossRealization > 0 
-            ? Math.round((freightDeduction + mandiHandling) / harvestQty) 
+          const activeSelectedLot = (engineMode === 'LISTED_LOT' && selectedLotId)
+            ? userLots.find(l => l.id === selectedLotId) || null
+            : null;
+
+          const activeCommodity = (engineMode === 'LISTED_LOT' && activeSelectedLot)
+            ? activeSelectedLot.commodity
+            : simulatorCrop;
+
+          const activeQty = (engineMode === 'LISTED_LOT' && activeSelectedLot)
+            ? activeSelectedLot.quantity_quintals
+            : simulatorQty;
+
+          const spotRate = (engineMode === 'LISTED_LOT' && activeSelectedLot)
+            ? activeSelectedLot.base_price_per_quintal
+            : (currentCalcMandi?.modal_price || 2450);
+
+          const transportCost = grossRealization > 0 
+            ? Math.round((freightDeduction + mandiHandling) / (harvestQty || 1)) 
             : 65;
-          const immediateTakeHomePerQtl = Math.max(0, spotRate - transportCessPerQtl);
-          const holdTakeHomePerQtl = Math.max(0, projectedFuturePrice - totalHoldingCostPerQtl - transportCessPerQtl);
-          const netAlphaPerQtl = holdTakeHomePerQtl - immediateTakeHomePerQtl;
-          const totalNetGainLot = Math.round(netAlphaPerQtl * harvestQty);
-          const isHoldingProfitable = netAlphaPerQtl > 0;
+
+          const forecast = calculateAgriculturalHoldVsSellForecast({
+            commodity: activeCommodity,
+            holdDays,
+            initialQuantityQuintals: activeQty,
+            currentSpotPricePerQtl: spotRate,
+            mspBenchmarkFloor: mspBenchmarkFloor || spotRate,
+            transportFreightPerQtl: transportCost
+          });
+
+          const activeScenario = selectedScenario === 'BEARISH' 
+            ? forecast.scenarios.bearish 
+            : selectedScenario === 'BULLISH' 
+            ? forecast.scenarios.bullish 
+            : forecast.scenarios.base;
+
+          const isHoldingProfitable = activeScenario.netAlphaPerQtl > 0;
 
           return (
             <div>
+              {/* Preservability & Physical Driage Indicator Strip */}
+              <div style={{
+                backgroundColor: forecast.storageHealthRating === 'EXCEEDED_SHELF_LIFE' ? '#fef2f2' : '#f0fdf4',
+                border: forecast.storageHealthRating === 'EXCEEDED_SHELF_LIFE' ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheck size={16} color={forecast.storageHealthRating === 'EXCEEDED_SHELF_LIFE' ? '#dc2626' : '#16a34a'} />
+                  <span style={{ fontSize: '0.76rem', color: '#1e293b', fontWeight: 600 }}>
+                    <strong>{forecast.commodity}</strong> ({forecast.profile.recommendedStorageType.replace(/_/g, ' ')}) • {lang === 'MR' ? 'कमाल सुरक्षित साठवणूक मर्यादा:' : 'Max Safe Shelf-Life:'} <strong>{forecast.profile.maxSafeHoldingDays} {lang === 'MR' ? 'दिवस' : 'Days'}</strong>
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '14px', fontSize: '0.74rem', color: '#475569' }}>
+                  <span>
+                    {lang === 'MR' ? 'वजनातील घट (Driage):' : 'Physical Driage:'}{' '}
+                    <strong style={{ color: '#b91c1c' }}>-{forecast.driageLossPct}% (-{forecast.driageLossQuintals} Qtl)</strong>
+                  </span>
+                  <span>
+                    {lang === 'MR' ? 'विक्रीयोग्य अंतिम वजन:' : 'Marketable Weight:'}{' '}
+                    <strong style={{ color: '#15803d' }}>{forecast.effectiveMarketableWeightQuintals} Qtl</strong>
+                  </span>
+                  <span>
+                    {lang === 'MR' ? 'अंदाज अचूकता (Confidence):' : 'Confidence:'}{' '}
+                    <strong style={{ color: '#0369a1' }}>{activeScenario.confidenceScorePct}%</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Financial Payoff Comparison Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
                 {/* Option A: Sell Today */}
                 <div style={{
@@ -3747,24 +4072,24 @@ https://agroconnect.gov.in`;
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                      Option A: Sell Today
+                      {lang === 'MR' ? 'पर्याय अ: आजच विक्री करा' : 'Option A: Sell Today'}
                     </span>
                     <span style={{ fontSize: '0.7rem', backgroundColor: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                      Today's Spot APMC
+                      {lang === 'MR' ? 'आजचा APMC भाव' : "Today's Spot APMC"}
                     </span>
                   </div>
                   <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
-                    ₹{spotRate.toLocaleString()}{' '}
+                    ₹{spotRate.toLocaleString('en-IN')}{' '}
                     <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>/ Quintal</span>
                   </div>
                   <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '6px' }}>
-                    Take-home after transport & cess: <strong>₹{immediateTakeHomePerQtl.toLocaleString()}/qtl</strong>
+                    {lang === 'MR' ? 'वाहतूक व बाजार उपकर वजा:' : 'Take-home after transport & cess:'} <strong>₹{forecast.immediateNetTakeHomePerQtl.toLocaleString('en-IN')}/qtl</strong>
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
-                    Total Cash for {harvestQty} Qtl: <strong>₹{(immediateTakeHomePerQtl * harvestQty).toLocaleString()}</strong>
+                    {lang === 'MR' ? 'एकूण रोख रक्कम:' : 'Total Cash for'} {activeQty} Qtl: <strong>₹{forecast.immediateTotalCashInr.toLocaleString('en-IN')}</strong>
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '8px' }}>
-                    • Zero storage risk • Immediate liquidity • Vulnerable to seasonal harvest gluts
+                    • {lang === 'MR' ? 'शून्य साठवणूक जोखीम • तात्काळ रोकड तरलता • हंगामी आवक घटीचा लाभ नाही' : 'Zero storage risk • Immediate cash in hand • Vulnerable to seasonal harvest gluts'}
                   </div>
                 </div>
 
@@ -3777,24 +4102,26 @@ https://agroconnect.gov.in`;
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '0.74rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#64748b', textTransform: 'uppercase' }}>
-                      Option B: Hold {holdDays} Days in WDRA Storage
+                      {lang === 'MR' 
+                        ? `पर्याय ब: ${holdDays} दिवस ${forecast.profile.recommendedStorageType === 'WDRA_COLD_STORAGE' ? 'शीतगृहात (Cold Chain)' : 'गोदामात'} साठवा` 
+                        : `Option B: Hold ${holdDays} Days in ${forecast.profile.recommendedStorageType === 'WDRA_COLD_STORAGE' ? 'Cold Storage (❄️ 2°-4°C)' : 'WDRA Depot'}`}
                     </span>
                     <span style={{ fontSize: '0.7rem', backgroundColor: isHoldingProfitable ? '#dcfce7' : '#f1f5f9', color: isHoldingProfitable ? '#15803d' : '#475569', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                      {appreciationPct >= 0 ? `+${appreciationPct}% Projected` : `${appreciationPct}% Risk`}
+                      {activeScenario.grossAppreciationPct >= 0 ? `+${activeScenario.grossAppreciationPct}% Projected` : `${activeScenario.grossAppreciationPct}% Risk`}
                     </span>
                   </div>
                   <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#0f172a' }}>
-                    ₹{projectedFuturePrice.toLocaleString()}{' '}
+                    ₹{activeScenario.projectedPricePerQtl.toLocaleString('en-IN')}{' '}
                     <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>/ Quintal ({holdDays}D Forward)</span>
                   </div>
                   <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '6px' }}>
-                    Storage Rent ({holdDays}d @ ₹0.85) + Insurance: <strong>-₹{totalHoldingCostPerQtl}/qtl</strong>
+                    {lang === 'MR' ? 'गोदाम भाडे + हमाली + विमा + कर्ज व्याज:' : 'Storage Rent + Hamali + Insurance + Interest:'} <strong>-₹{forecast.totalCarryingCostPerQtl}/qtl</strong>
                   </div>
                   <div style={{ fontSize: '0.74rem', color: '#065f46', marginTop: '3px', fontWeight: 700 }}>
-                    Net Projected Realization: ₹{holdTakeHomePerQtl.toLocaleString()}/qtl
+                    {lang === 'MR' ? 'वजनातील घट वजा जाता निव्वळ प्राप्ती:' : 'Net Realization (after physical driage):'} ₹{(forecast.immediateNetTakeHomePerQtl + activeScenario.netAlphaPerQtl).toLocaleString('en-IN')}/qtl
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#15803d', marginTop: '8px' }}>
-                    • Up to 70% immediate liquidity via e-NWR pledge loan at 7% p.a.
+                    • {lang === 'MR' ? activeScenario.primaryMarketDriverMr : activeScenario.primaryMarketDriverEn}
                   </div>
                 </div>
 
@@ -3810,22 +4137,22 @@ https://agroconnect.gov.in`;
                 }}>
                   <div>
                     <div style={{ fontSize: '0.7rem', fontWeight: 800, color: isHoldingProfitable ? '#047857' : '#b45309', textTransform: 'uppercase' }}>
-                      AI SALE-WINDOW RECOMMENDATION
+                      {lang === 'MR' ? 'AI विक्री खिडकी शिफारस' : 'AI SALE-WINDOW RECOMMENDATION'}
                     </div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: isHoldingProfitable ? '#065f46' : '#92400e', marginTop: '4px' }}>
-                      {isHoldingProfitable ? `HOLD IN WDRA STORAGE (${holdDays} DAYS)` : 'SELL TODAY IN SPOT MANDI'}
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: forecast.recommendationBadgeColor, marginTop: '4px' }}>
+                      {lang === 'MR' ? forecast.recommendationHeadlineMr : forecast.recommendationHeadlineEn}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: isHoldingProfitable ? '#065f46' : '#92400e', marginTop: '6px' }}>
-                      {isHoldingProfitable 
-                        ? `Holding yields +₹${netAlphaPerQtl.toLocaleString()}/qtl net surplus over today's spot rate.`
-                        : 'High spoilage risk or seasonal supply influx advises immediate dispatch to spot APMC.'}
+                    <div style={{ fontSize: '0.76rem', color: '#334155', marginTop: '6px', lineHeight: 1.4 }}>
+                      {lang === 'MR' ? forecast.justificationMr : forecast.justificationEn}
                     </div>
                   </div>
 
                   <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: '10px', marginTop: '10px' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Estimated Lot Net Alpha:</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#d97706' }}>
-                      {isHoldingProfitable ? '+' : ''}₹{totalNetGainLot.toLocaleString()}
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      {lang === 'MR' ? 'एकूण लॉटवरील निव्वळ अतिरिक्त नफा (Net Alpha):' : 'Estimated Lot Net Surplus (Alpha):'}
+                    </div>
+                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#d97706' }}>
+                      {activeScenario.totalLotAlphaInr >= 0 ? '+' : ''}₹{activeScenario.totalLotAlphaInr.toLocaleString('en-IN')}
                     </div>
                   </div>
                 </div>
@@ -3849,24 +4176,46 @@ https://agroconnect.gov.in`;
                   </div>
                   <div>
                     <strong style={{ fontSize: '0.82rem', color: '#1e3a8a' }}>
-                      Need cash while waiting for higher prices? Get e-NWR Warehouse Receipt Pledge Loans
+                      {lang === 'MR' 
+                        ? `पैशांची तातडीची गरज? ₹${forecast.enwrEligibleLoanAmountInr.toLocaleString('en-IN')} पर्यंत तात्काळ गोदाम पावती कर्ज (e-NWR) मिळवा`
+                        : `Need cash while waiting for higher prices? Unlock ₹${forecast.enwrEligibleLoanAmountInr.toLocaleString('en-IN')} via e-NWR Pledge Loan`}
                     </strong>
                     <div style={{ fontSize: '0.72rem', color: '#3b82f6', marginTop: '1px' }}>
-                      Govt subsidized interest at 7% p.a. • Instant loan up to 70% of produce valuation via NABARD accredited banks.
+                      {lang === 'MR'
+                        ? `शासकीय ७% सवलतीचे व्याज (फक्त ₹${forecast.enwrMonthlyInterestInr.toLocaleString('en-IN')}/महिना) • शेतमाल सुरक्षित ठेवून ७०% रक्कम थेट बँक खात्यात.`
+                        : `Govt subsidized 7% p.a. interest (~₹${forecast.enwrMonthlyInterestInr.toLocaleString('en-IN')}/mo) • 70% spot value directly credited into your DBT bank account.`}
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById('nearby-storage-facilities');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="btn-gov-primary"
-                  style={{ fontSize: '0.76rem', padding: '7px 14px', backgroundColor: '#1d4ed8', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Warehouse size={13} /> Find WDRA Storage & Pledge
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEnwrPrefillData({
+                        commodity: activeCommodity || 'Soybean',
+                        quantity: activeQty || 120,
+                        price: spotRate || 4900,
+                        warehouseName: 'Maharashtra State Warehousing Corp (MSWC) Latur Hub'
+                      });
+                      setShowENWRModal(true);
+                    }}
+                    className="btn-gov-primary"
+                    style={{ fontSize: '0.78rem', padding: '8px 16px', backgroundColor: '#1d4ed8', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, boxShadow: '0 2px 4px rgba(29, 78, 216, 0.25)' }}
+                  >
+                    <Warehouse size={14} /> {lang === 'MR' ? '७०% गोदाम कर्ज अर्ज करा' : 'Apply 70% e-NWR Advance'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('nearby-storage-facilities');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="btn-gov-secondary"
+                    style={{ fontSize: '0.76rem', padding: '7px 12px', borderColor: '#bfdbfe', color: '#1e40af', backgroundColor: '#ffffff', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  >
+                    Locate Godowns
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -3893,27 +4242,91 @@ https://agroconnect.gov.in`;
             </p>
           </div>
 
-          {/* District Filter Chips */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            {['All', 'Nashik', 'Pune', 'Latur', 'Amravati', 'Ahmednagar', 'Jalgaon'].map(dist => (
+          {/* Facility Type & District Filter Controls */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+            {/* Facility Type Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <button
-                key={dist}
                 type="button"
-                onClick={() => setSelectedStorageDistrict(dist)}
+                onClick={() => setSelectedStorageType('ALL')}
                 style={{
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   borderRadius: 'var(--radius-full)',
-                  border: selectedStorageDistrict === dist ? '1px solid #0284c7' : '1px solid #e2e8f0',
-                  backgroundColor: selectedStorageDistrict === dist ? '#0284c7' : '#ffffff',
-                  color: selectedStorageDistrict === dist ? '#ffffff' : '#64748b',
+                  border: selectedStorageType === 'ALL' ? '2px solid #0f172a' : '1px solid #cbd5e1',
+                  backgroundColor: selectedStorageType === 'ALL' ? '#0f172a' : '#ffffff',
+                  color: selectedStorageType === 'ALL' ? '#ffffff' : '#475569',
                   fontSize: '0.74rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer'
                 }}
               >
-                {dist}
+                {lang === 'MR' ? 'सर्व सुविधा' : 'All Facilities'}
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => setSelectedStorageType('COLD_STORAGE')}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  border: selectedStorageType === 'COLD_STORAGE' ? '2px solid #0284c7' : '1px solid #bfdbfe',
+                  backgroundColor: selectedStorageType === 'COLD_STORAGE' ? '#0284c7' : '#eff6ff',
+                  color: selectedStorageType === 'COLD_STORAGE' ? '#ffffff' : '#1d4ed8',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Snowflake size={13} /> {lang === 'MR' ? '❄️ केवळ शीतगृहे (Cold Storage)' : '❄️ Cold Storages Only'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedStorageType('WDRA_GODOWN')}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  border: selectedStorageType === 'WDRA_GODOWN' ? '2px solid #059669' : '1px solid #bbf7d0',
+                  backgroundColor: selectedStorageType === 'WDRA_GODOWN' ? '#059669' : '#f0fdf4',
+                  color: selectedStorageType === 'WDRA_GODOWN' ? '#ffffff' : '#166534',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Warehouse size={13} /> {lang === 'MR' ? '🌾 WDRA गोदामे (Dry Godowns)' : '🌾 WDRA Godowns Only'}
+              </button>
+            </div>
+
+            {/* District Filter Chips */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{lang === 'MR' ? 'जिल्हा:' : 'District:'}</span>
+              {['All', 'Nashik', 'Pune', 'Latur', 'Amravati', 'Ahmednagar', 'Jalgaon'].map(dist => (
+                <button
+                  key={dist}
+                  type="button"
+                  onClick={() => setSelectedStorageDistrict(dist)}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 'var(--radius-full)',
+                    border: selectedStorageDistrict === dist ? '1px solid #0284c7' : '1px solid #e2e8f0',
+                    backgroundColor: selectedStorageDistrict === dist ? '#0284c7' : '#ffffff',
+                    color: selectedStorageDistrict === dist ? '#ffffff' : '#64748b',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {dist}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -3940,7 +4353,11 @@ https://agroconnect.gov.in`;
         {/* Storage Facilities Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
           {storageFacilities
-            .filter(f => selectedStorageDistrict === 'All' || f.district.toLowerCase() === selectedStorageDistrict.toLowerCase())
+            .filter(f => {
+              const matchDist = selectedStorageDistrict === 'All' || f.district.toLowerCase() === selectedStorageDistrict.toLowerCase();
+              const matchType = selectedStorageType === 'ALL' || f.facility_type === selectedStorageType;
+              return matchDist && matchType;
+            })
             .map(facility => {
               const capacityPercent = Math.round((facility.available_capacity_mt / facility.total_capacity_mt) * 100);
               return (
@@ -4037,21 +4454,50 @@ https://agroconnect.gov.in`;
                   </div>
 
                   {/* Actions */}
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
                       Contact: <strong>{facility.contact_person || 'Facility Manager'}</strong>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStorageInquirySuccess(`Inquiry sent to ${facility.name}! Manager ${facility.contact_person || ''} will contact you on your registered mobile number.`);
-                        setTimeout(() => setStorageInquirySuccess(null), 5000);
-                      }}
-                      className="btn-gov-primary"
-                      style={{ padding: '6px 14px', fontSize: '0.76rem' }}
-                    >
-                      Book Space
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {facility.enwr_pledge_eligible && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEnwrPrefillData({
+                              commodity: calcCommodity || 'Soybean',
+                              quantity: harvestQty || 120,
+                              price: currentCalcMandi?.modal_price || 4900,
+                              warehouseName: facility.name
+                            });
+                            setShowENWRModal(true);
+                          }}
+                          className="btn-gov-secondary"
+                          style={{ padding: '6px 11px', fontSize: '0.74rem', borderColor: '#93c5fd', color: '#1d4ed8', backgroundColor: '#eff6ff', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                        >
+                          <Percent size={12} /> e-NWR 70% Loan
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFacilityForBooking(facility);
+                          setShowStorageBookingModal(true);
+                        }}
+                        className="btn-gov-primary"
+                        style={{ 
+                          padding: '6px 14px', 
+                          fontSize: '0.76rem',
+                          backgroundColor: facility.facility_type === 'COLD_STORAGE' ? '#0284c7' : '#059669',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontWeight: 700
+                        }}
+                      >
+                        {facility.facility_type === 'COLD_STORAGE' ? <Snowflake size={12} /> : <Warehouse size={12} />}
+                        {lang === 'MR' ? 'जागा आरक्षित करा' : 'Book Space'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -4404,6 +4850,33 @@ https://agroconnect.gov.in`;
           </div>
         </div>
       )}
+
+      {/* e-NWR Warehouse Receipt Pledge Financing Modal */}
+      <ENWRPledgeLoanModal
+        isOpen={showENWRModal}
+        onClose={() => setShowENWRModal(false)}
+        lang={lang}
+        currentUser={currentUser}
+        initialCommodity={enwrPrefillData.commodity}
+        initialQuantity={enwrPrefillData.quantity}
+        initialPrice={enwrPrefillData.price}
+        initialWarehouseName={enwrPrefillData.warehouseName}
+      />
+
+      {/* Cold Storage & WDRA Warehouse Space Reservation Modal */}
+      <StorageBookingModal
+        isOpen={showStorageBookingModal}
+        onClose={() => setShowStorageBookingModal(false)}
+        facility={selectedFacilityForBooking}
+        lang={lang}
+        currentUser={currentUser}
+        prefillCommodity={engineMode === 'LISTED_LOT' && selectedLotId ? (userLots.find(l => l.id === selectedLotId)?.commodity || simulatorCrop) : simulatorCrop}
+        prefillQuantity={engineMode === 'LISTED_LOT' && selectedLotId ? (userLots.find(l => l.id === selectedLotId)?.quantity_quintals || simulatorQty) : simulatorQty}
+        onBookingSuccess={(booking) => {
+          setStorageInquirySuccess(`✓ ${booking.facility_type === 'COLD_STORAGE' ? 'Cold storage' : 'Warehouse'} space allotted at ${booking.facility_name}! Allotment Token #${booking.id}. Details saved to your account.`);
+          setTimeout(() => setStorageInquirySuccess(null), 8000);
+        }}
+      />
     </div>
   );
 };

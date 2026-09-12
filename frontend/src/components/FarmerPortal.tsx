@@ -4,7 +4,8 @@ import {
   Printer, Plus, 
   MessageSquare, Building2, X, QrCode, Check,
   Trash2, AlertTriangle, Users, Sparkles,
-  Truck, Send, Navigation, FileText
+  Truck, Send, Navigation, FileText,
+  Warehouse, Snowflake, Percent
 } from 'lucide-react';
 import { 
   api, 
@@ -17,11 +18,16 @@ import {
   type BuyerReliabilityScorecard,
   type BuyerMatch,
   type LogisticsBooking,
-  type LogisticsStatus
+  type LogisticsStatus,
+  type StorageFacility,
+  type StorageBooking
 } from '../services/api';
 import type { FPOPooledBatch, AIQualityAssayResult } from '../types';
 import { AIQualityAssayModal } from './AIQualityAssayModal';
 import { BuyerScorecardModal } from './BuyerScorecardModal';
+import { StorageBookingModal } from './StorageBookingModal';
+import { ENWRPledgeLoanModal } from './ENWRPledgeLoanModal';
+import { calculateAgriculturalHoldVsSellForecast } from '../utils/agriculturalPreservationForecaster';
 import { translations, type Language } from '../utils/i18n';
 
 interface FarmerPortalProps {
@@ -50,6 +56,69 @@ function getCropImage(commodity: string): string {
   }
   return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop&q=80';
 }
+
+export const COMMODITY_VARIETIES: Record<string, { varieties: string[]; defaultRate: number; defaultMoisture: number; defaultHub: string }> = {
+  'Onion': {
+    varieties: ['Garwa / Nasik Red (Export Quality)', 'Pol / Early Kharif Red', 'Rangada Winter Harvest', 'White Onion (Dehydration Grade)'],
+    defaultRate: 2450,
+    defaultMoisture: 10.5,
+    defaultHub: 'Lasalgaon APMC Cold Hub'
+  },
+  'Soybean': {
+    varieties: ['JS-335 Certified Yellow', 'JS-9305 High-Yield', 'Phule Kalyani (DS-228)', 'NRC-37 Standard'],
+    defaultRate: 4890,
+    defaultMoisture: 10.0,
+    defaultHub: 'Latur APMC Yard'
+  },
+  'Tomato': {
+    varieties: ['Hybrid Abhinav (Firm Red)', 'US-440 Long Shelf Life', 'Vaishali Table Tomato', 'Himsona Processing'],
+    defaultRate: 1950,
+    defaultMoisture: 12.0,
+    defaultHub: 'Narayangaon APMC Terminal'
+  },
+  'Wheat': {
+    varieties: ['Lokwan Desi Sharbati (Grade A)', 'GW-496 Sharbati', 'MACS-6222 High Protein', 'Sujata Desi'],
+    defaultRate: 2810,
+    defaultMoisture: 10.5,
+    defaultHub: 'Kopargaon APMC Depot'
+  },
+  'Cotton': {
+    varieties: ['Medium Long Staple (29mm+)', 'DCH-32 Extra Long', 'Bt-II Certified Bollgard', 'LRA-5166'],
+    defaultRate: 7120,
+    defaultMoisture: 8.5,
+    defaultHub: 'Amravati Cotton Market Yard'
+  },
+  'Potato': {
+    varieties: ['Kufri Jyoti (Cold Store Grade)', 'Kufri Pukhraj', 'Kufri Chipsona (Processing)', 'Lal Gulab'],
+    defaultRate: 1650,
+    defaultMoisture: 14.0,
+    defaultHub: 'Manchar APMC Cold Chain Hub'
+  },
+  'Banana': {
+    varieties: ['Grand Naine (Export Grade G9)', 'Robusta Premium', 'Shrimanti', 'Elakki Local'],
+    defaultRate: 1550,
+    defaultMoisture: 16.0,
+    defaultHub: 'Jalgaon APMC Banana Cluster'
+  },
+  'Orange': {
+    varieties: ['Nagpur Mandarin (Grade A Export)', 'Jaffa Sweet Orange', 'Kinnow Standard', 'Local Santra'],
+    defaultRate: 3400,
+    defaultMoisture: 12.0,
+    defaultHub: 'Nagpur Cotton Market Orange Hub'
+  },
+  'Pomegranate': {
+    varieties: ['Bhagwa Super Red (Export A+)', 'Arakta Dark Red', 'Ganesh Standard', 'Mridula Sweet'],
+    defaultRate: 7800,
+    defaultMoisture: 11.0,
+    defaultHub: 'Solapur APMC Special Yard'
+  },
+  'Garlic': {
+    varieties: ['G-282 Large Clove', 'Yamuna Safed (G-1)', 'Ooty Local Hybrid', 'Desi Bulb Grade A'],
+    defaultRate: 8500,
+    defaultMoisture: 9.5,
+    defaultHub: 'Pimpalgaon Baswant APMC Hub'
+  }
+};
 
 export const FarmerPortal: React.FC<FarmerPortalProps> = ({ 
   currentUser, 
@@ -85,20 +154,21 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   const [showCreatePoolModal, setShowCreatePoolModal] = useState<boolean>(false);
   const [newPoolCommodity, setNewPoolCommodity] = useState<string>('Onion');
   const [newPoolVariety, setNewPoolVariety] = useState<string>('Garwa Grade A (Export Quality)');
-  const [newPoolTargetQty, setNewPoolTargetQty] = useState<number | ''>(600);
-  const [newPoolPrice, setNewPoolPrice] = useState<number | ''>(2550);
-  const [newPoolHub, setNewPoolHub] = useState<string>('Dindori Agro-Processing & Cold Storage Cluster, Nashik');
-  const [newPoolFpoName, setNewPoolFpoName] = useState<string>('Sahyadri Farmers Producer Co. Ltd.');
+  const [newPoolTargetQty, setNewPoolTargetQty] = useState<number | ''>(500);
+  const [newPoolPrice, setNewPoolPrice] = useState<number | ''>(2500);
+  const [newPoolHub, setNewPoolHub] = useState<string>('');
+  const [newPoolFpoName, setNewPoolFpoName] = useState<string>('');
 
   // New Harvest Form State
   const [newCommodity, setNewCommodity] = useState<string>('Onion');
-  const [newVariety, setNewVariety] = useState<string>('');
+  const [newVariety, setNewVariety] = useState<string>('Garwa / Nasik Red (Export Quality)');
   const [newVolume, setNewVolume] = useState<number | ''>('');
-  const [newRate, setNewRate] = useState<number | ''>('');
+  const [newVolumeUnit, setNewVolumeUnit] = useState<'QTL' | 'MT'>('QTL');
+  const [newRate, setNewRate] = useState<number | ''>(2450);
   const [newGrade, setNewGrade] = useState<string>('Grade A');
-  const [newMoisture, setNewMoisture] = useState<number | ''>('');
-  const [newDeliveryDays, setNewDeliveryDays] = useState<number | ''>('');
-  const [newHub, setNewHub] = useState<string>('');
+  const [newMoisture, setNewMoisture] = useState<number | ''>(10.5);
+  const [newDeliveryDays, setNewDeliveryDays] = useState<number | ''>(3);
+  const [newHub, setNewHub] = useState<string>('Lasalgaon APMC Cold Hub');
 
   const [mspPrices, setMspPrices] = useState<CommodityPrice[]>([]);
   const [buyerDemands, setBuyerDemands] = useState<BuyerDemand[]>([]);
@@ -129,13 +199,42 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   const [bookNetWeight, setBookNetWeight] = useState<number | ''>(120);
   const [isBookingTruck, setIsBookingTruck] = useState<boolean>(false);
 
+  // Lot-Level Hold vs Sell & Storage Modals State
+  const [lotHoldDurations, setLotHoldDurations] = useState<Record<number, number>>({});
+  const [storageFacilities, setStorageFacilities] = useState<StorageFacility[]>([]);
+  const [showStorageModal, setShowStorageModal] = useState<boolean>(false);
+  const [storageModalFacility, setStorageModalFacility] = useState<StorageFacility | null>(null);
+  const [storageModalCommodity, setStorageModalCommodity] = useState<string>('Onion');
+  const [storageModalQty, setStorageModalQty] = useState<number>(100);
+  const [showENWRModal, setShowENWRModal] = useState<boolean>(false);
+  const [enwrPrefillData, setEnwrPrefillData] = useState<{
+    commodity: string;
+    quantity: number;
+    price: number;
+    warehouseName: string;
+  }>({
+    commodity: 'Onion',
+    quantity: 100,
+    price: 2400,
+    warehouseName: 'Maharashtra State Warehousing Corp (MSWC)'
+  });
+
   useEffect(() => {
     loadData();
   }, [currentUser]);
 
   useEffect(() => {
     if (initialLotPrefill) {
-      if (initialLotPrefill.commodity) setNewCommodity(initialLotPrefill.commodity);
+      if (initialLotPrefill.commodity) {
+        setNewCommodity(initialLotPrefill.commodity);
+        const p = COMMODITY_VARIETIES[initialLotPrefill.commodity];
+        if (p) {
+          setNewVariety(p.varieties[0]);
+          setNewRate(p.defaultRate);
+          setNewMoisture(p.defaultMoisture);
+          setNewHub(p.defaultHub);
+        }
+      }
       if (initialLotPrefill.variety) setNewVariety(initialLotPrefill.variety);
       if (initialLotPrefill.price) setNewRate(initialLotPrefill.price);
       if (initialLotPrefill.mandi) setNewHub(initialLotPrefill.mandi);
@@ -145,13 +244,14 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
   const loadData = async () => {
     try {
-      const [allLots, allRfqs, allContracts, allMsp, allPools, allDemands] = await Promise.all([
+      const [allLots, allRfqs, allContracts, allMsp, allPools, allDemands, allStorage] = await Promise.all([
         api.getLots(),
         api.getRFQs(),
         api.getContracts(),
         api.getMSPFloorPrices().catch(() => []),
         api.getPooledBatches().catch(() => []),
-        api.getBuyerDemands().catch(() => [])
+        api.getBuyerDemands().catch(() => []),
+        api.getStorageFacilities().catch(() => [])
       ]);
       setLots(allLots);
       setRfqs(allRfqs);
@@ -159,6 +259,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       setMspPrices(allMsp);
       setFpoPools(allPools);
       setBuyerDemands(allDemands);
+      setStorageFacilities(allStorage);
 
       // Compute AI matches for all lots
       const matchesMap: Record<number, BuyerMatch[]> = {};
@@ -177,10 +278,22 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
   const handleApplyAssayResult = (result: AIQualityAssayResult) => {
     setAppliedAssayResult(result);
-    if (result.commodity) setNewCommodity(result.commodity);
-    if (result.grade_code === 'A') setNewGrade('Grade A');
-    else if (result.grade_code === 'B') setNewGrade('Grade B');
-    else setNewGrade('Grade B');
+    if (result.commodity) {
+      setNewCommodity(result.commodity);
+      const p = COMMODITY_VARIETIES[result.commodity];
+      if (p) {
+        setNewVariety(result.sample_name || p.varieties[0]);
+        setNewRate(p.defaultRate);
+        setNewHub(p.defaultHub);
+      }
+    }
+    if (result.grade_code === 'A+' || result.predicted_grade?.includes('A+')) {
+      setNewGrade('Grade A+');
+    } else if (result.grade_code === 'A' || result.predicted_grade?.includes('Grade A')) {
+      setNewGrade('Grade A');
+    } else {
+      setNewGrade('Grade B');
+    }
     setNewMoisture(result.estimated_moisture_percent);
 
     api.saveQualityAssay({
@@ -219,7 +332,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       const updated = await api.contributeLotToPool(contributeModalPool.id, {
         farmerId: currentUser.id,
         farmerName: currentUser.name,
-        farmerPhone: currentUser.phone || '+91 98220 99887',
+        farmerPhone: currentUser.phone || '',
         district: currentUser.district || contributeModalPool.district,
         quantityQuintals: qty,
         lotId: contributeSelectedLotId ? Number(contributeSelectedLotId) : undefined,
@@ -249,7 +362,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
         fpo_name: newPoolFpoName || `${currentUser.district} Farmers Producer Co. Ltd.`,
         fpo_registration_number: `MH-${currentUser.district?.slice(0, 3).toUpperCase() || 'NSK'}-FPO-${Date.now().toString().slice(-4)}`,
         fpo_contact_person: currentUser.name,
-        fpo_contact_phone: currentUser.phone || '+91 98220 12345',
+        fpo_contact_phone: currentUser.phone || '',
         district: currentUser.district || 'Nashik',
         central_hub_location: newPoolHub || 'District APMC Cold Storage Terminal',
         commodity: newPoolCommodity,
@@ -266,6 +379,19 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     } catch (err: any) {
       console.error('Error creating pool:', err);
       alert(`Failed to create pool: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleDeletePool = async (poolId: number) => {
+    if (!window.confirm(lang === 'MR' ? 'तुम्हाला हा कन्सोर्टियम पूल हटवायचा आहे का?' : 'Are you sure you want to remove this collective pool?')) return;
+    try {
+      await api.deleteFPOPool(poolId);
+      setFpoPools(prev => prev.filter(p => p.id !== poolId));
+      setLotSuccessMsg(lang === 'MR' ? '✓ कन्सोर्टियम पूल यशस्वीरित्या हटवला.' : '✓ Consignment pool successfully removed.');
+      setTimeout(() => setLotSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error('Failed to remove pool:', err);
+      alert(lang === 'MR' ? 'पूल हटवण्यात त्रुटी आली.' : 'Failed to remove consignment pool.');
     }
   };
 
@@ -286,31 +412,52 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     }
 
     try {
+      const rawVolume = Number(newVolume) || 1;
+      const qtyQuintals = newVolumeUnit === 'MT' 
+        ? Math.round(rawVolume * 10) 
+        : Math.round(rawVolume);
+
+      const commodityConfig = COMMODITY_VARIETIES[newCommodity];
+      const finalVariety = newVariety || commodityConfig?.varieties[0] || 'Standard Grade';
+      const finalRate = Number(newRate) || commodityConfig?.defaultRate || 2000;
+      const finalMoisture = Number(newMoisture) || commodityConfig?.defaultMoisture || 10.5;
+      const finalHub = newHub || commodityConfig?.defaultHub || 'Terminal APMC Yard';
+
       const created = await api.createLot({
         farmer_id: currentUser.id,
         farmer_name: currentUser.name,
         farmer_phone: currentUser.phone || '',
         commodity: newCommodity || 'Onion',
-        variety: newVariety || 'Standard Grade',
-        quantity_quintals: (Number(newVolume) || 1) * 10,
-        base_price_per_quintal: Number(newRate) || 2000,
+        variety: finalVariety,
+        quantity_quintals: qtyQuintals,
+        base_price_per_quintal: finalRate,
         quality_grade: newGrade,
-        moisture_percent: Number(newMoisture) || 11.0,
+        moisture_percent: finalMoisture,
         expected_delivery_days: Number(newDeliveryDays) || 3,
-        mandi_name: newHub || 'Terminal APMC Yard',
+        mandi_name: finalHub,
         district: currentUser.district || 'Nashik',
-        description: `${newGrade} certified batch with ${newMoisture || 11}% moisture index. Stored at ${newHub || 'APMC Yard'}.`
+        description: `${newGrade} certified batch with ${finalMoisture}% moisture index. Stored at ${finalHub}.`
       });
 
       setShowAddHarvestModal(false);
-      setNewVariety('');
+      const defPreset = COMMODITY_VARIETIES['Onion'];
+      setNewCommodity('Onion');
+      setNewVariety(defPreset.varieties[0]);
       setNewVolume('');
-      setNewRate('');
-      setNewMoisture('');
-      setNewDeliveryDays('');
-      setNewHub('');
+      setNewVolumeUnit('QTL');
+      setNewRate(defPreset.defaultRate);
+      setNewMoisture(defPreset.defaultMoisture);
+      setNewDeliveryDays(3);
+      setNewHub(defPreset.defaultHub);
+      setNewGrade('Grade A');
+      setAppliedAssayResult(null);
+
       await loadData();
-      setLotSuccessMsg(`✓ Lot #${created.id} successfully listed! ${newVolume} MT (${(Number(newVolume) || 1) * 10} Qtl) is now live across institutional buyer network.`);
+      setLotSuccessMsg(
+        lang === 'MR'
+          ? `✓ लॉट #${created.id} यशस्वीरीत्या नोंदवला गेला! ${qtyQuintals} क्विंटल (${(qtyQuintals / 10).toFixed(1)} MT) ${newCommodity} (${finalVariety}) खरेदीदारांच्या लिलावासाठी खुला आहे.`
+          : `✓ Lot #${created.id} successfully listed! ${qtyQuintals} Qtl (${(qtyQuintals / 10).toFixed(1)} MT) of ${newCommodity} (${finalVariety}) is now live for institutional bidding.`
+      );
       setTimeout(() => setLotSuccessMsg(''), 6000);
     } catch (err) {
       console.error('Error creating lot:', err);
@@ -1104,24 +1251,257 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                   </div>
 
                   {/* 4 Metrics Strip */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
-                    <div>
-                      <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.availableQty}</div>
-                      <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.quantity_quintals} qtl ({(lot.quantity_quintals / 10).toFixed(1)} MT)</strong>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.askingRate}</div>
-                      <strong style={{ fontSize: '0.86rem', color: '#059669' }}>₹{lot.base_price_per_quintal} / qtl</strong>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.moistureIndex}</div>
-                      <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.moisture_percent}% (NABL Tested)</strong>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.apmcParity}</div>
-                      <strong style={{ fontSize: '0.82rem', color: '#059669' }}>+₹120 / qtl</strong>
-                    </div>
-                  </div>
+                  {(() => {
+                    const benchmarkPrice = mspPrices.find(m => m.commodity.toLowerCase() === lot.commodity.toLowerCase())?.modal_price 
+                      || COMMODITY_VARIETIES[lot.commodity]?.defaultRate 
+                      || lot.base_price_per_quintal;
+                    const parityDelta = lot.base_price_per_quintal - benchmarkPrice;
+                    const paritySign = parityDelta >= 0 ? '+' : '';
+                    const parityColor = parityDelta >= 0 ? '#059669' : '#dc2626';
+
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
+                        <div>
+                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.availableQty}</div>
+                          <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.quantity_quintals} qtl ({(lot.quantity_quintals / 10).toFixed(1)} MT)</strong>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.askingRate}</div>
+                          <strong style={{ fontSize: '0.86rem', color: '#059669' }}>₹{lot.base_price_per_quintal} / qtl</strong>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.moistureIndex}</div>
+                          <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{lot.moisture_percent}% (NABL Tested)</strong>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{t.apmcParity}</div>
+                          <strong style={{ fontSize: '0.82rem', color: parityColor }}>{paritySign}₹{parityDelta} / qtl</strong>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* LOT-SPECIFIC AI HOLD VS. SELL SALE-WINDOW ADVISORY */}
+                  {(() => {
+                    const holdDays = lotHoldDurations[lot.id] || 30;
+                    const forecast = calculateAgriculturalHoldVsSellForecast({
+                      commodity: lot.commodity,
+                      holdDays,
+                      initialQuantityQuintals: lot.quantity_quintals,
+                      currentSpotPricePerQtl: lot.base_price_per_quintal,
+                      mspBenchmarkFloor: lot.base_price_per_quintal
+                    });
+
+                    const baseScenario = forecast.scenarios.base;
+                    const isHoldingProfitable = baseScenario.netAlphaPerQtl > 0;
+                    const isColdChain = forecast.profile.recommendedStorageType === 'WDRA_COLD_STORAGE';
+
+                    return (
+                      <div style={{
+                        backgroundColor: isHoldingProfitable ? '#f8fafc' : '#fffbeb',
+                        border: isHoldingProfitable ? '1px solid #cbd5e1' : '1px solid #fde68a',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        {/* Advisory Header: Recommendation Badge & Hold Duration Buttons */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '50%',
+                              backgroundColor: forecast.recommendationBadgeColor,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff'
+                            }}>
+                              <Clock size={14} />
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>
+                                  {lang === 'MR' ? 'AI विक्री खिडकी सल्ला (Hold vs. Sell)' : 'AI Hold vs. Sell Advisory'}
+                                </strong>
+                                <span style={{
+                                  backgroundColor: forecast.recommendationBadgeColor,
+                                  color: '#ffffff',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '10px',
+                                  letterSpacing: '0.02em'
+                                }}>
+                                  {isHoldingProfitable 
+                                    ? (lang === 'MR' ? `साठवा (${holdDays} दिवस): +₹${baseScenario.totalLotAlphaInr.toLocaleString('en-IN')} नफा` : `HOLD ${holdDays}D: +₹${baseScenario.totalLotAlphaInr.toLocaleString('en-IN')} Net Alpha`)
+                                    : (lang === 'MR' ? 'आजच विका (वजन घट जोखीम)' : 'SELL TODAY (Protect Weight)')}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                {lang === 'MR' ? forecast.justificationMr : forecast.justificationEn}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Duration Selectors */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginRight: '2px' }}>
+                              {lang === 'MR' ? 'कालावधी:' : 'Hold:'}
+                            </span>
+                            {[15, 30, 45, 60, 90].map(d => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => setLotHoldDurations(prev => ({ ...prev, [lot.id]: d }))}
+                                style={{
+                                  padding: '2px 7px',
+                                  fontSize: '0.68rem',
+                                  borderRadius: '4px',
+                                  border: holdDays === d ? '1px solid #059669' : '1px solid #cbd5e1',
+                                  backgroundColor: holdDays === d ? '#ecfdf5' : '#ffffff',
+                                  color: holdDays === d ? '#065f46' : '#475569',
+                                  fontWeight: holdDays === d ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {d}D
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 3 Comparative Financial Blocks */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '8px' }}>
+                          {/* Block 1: Immediate Sale */}
+                          <div style={{ backgroundColor: '#ffffff', padding: '8px 10px', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.74rem' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.66rem', fontWeight: 700 }}>
+                              {lang === 'MR' ? 'पर्याय १: आजच विका (Spot APMC)' : 'OPTION 1: SELL TODAY SPOT'}
+                            </div>
+                            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+                              ₹{forecast.immediateTotalCashInr.toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                              ₹{lot.base_price_per_quintal}/qtl • 0% Driage • Immediate Cash
+                            </div>
+                          </div>
+
+                          {/* Block 2: Hold in Storage */}
+                          <div style={{ backgroundColor: '#ffffff', padding: '8px 10px', borderRadius: '4px', border: isHoldingProfitable ? '1px solid #a7f3d0' : '1px solid #e2e8f0', fontSize: '0.74rem' }}>
+                            <div style={{ color: isHoldingProfitable ? '#059669' : '#64748b', fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              {isColdChain && <Snowflake size={11} color="#0284c7" />}
+                              {lang === 'MR' 
+                                ? `${holdDays} दिवस साठवा (${forecast.profile.recommendedStorageType.replace(/_/g, ' ')})` 
+                                : `OPTION 2: HOLD ${holdDays}D (${forecast.profile.recommendedStorageType.replace(/_/g, ' ')})`}
+                            </div>
+                            <div style={{ fontSize: '1rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#0f172a', margin: '2px 0' }}>
+                              ₹{baseScenario.projectedPricePerQtl}/qtl
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                              {lang === 'MR' ? 'एकूण घट:' : 'Total Shrinkage:'}{' '}
+                              -{((forecast.driageLossQuintals + forecast.rotLossQuintals) / (lot.quantity_quintals || 1) * 100).toFixed(1)}% (-{(forecast.driageLossQuintals + forecast.rotLossQuintals).toFixed(1)} Qtl
+                              {forecast.rotLossQuintals > 0 ? `: ${forecast.driageLossQuintals}Q driage + ${forecast.rotLossQuintals}Q rot` : ''}) • {forecast.effectiveMarketableWeightQuintals} Qtl net
+                            </div>
+                          </div>
+
+                          {/* Block 3: Net Realization & Surplus Alpha */}
+                          <div style={{ backgroundColor: isHoldingProfitable ? '#ecfdf5' : '#f8fafc', padding: '8px 10px', borderRadius: '4px', border: isHoldingProfitable ? '1px solid #86efac' : '1px solid #e2e8f0', fontSize: '0.74rem' }}>
+                            <div style={{ color: isHoldingProfitable ? '#065f46' : '#64748b', fontSize: '0.66rem', fontWeight: 700 }}>
+                              {lang === 'MR' ? 'निव्वळ अतिरिक्त नफा (Net Alpha)' : 'ESTIMATED LOT NET ALPHA'}
+                            </div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isHoldingProfitable ? '#059669' : '#d97706', margin: '2px 0' }}>
+                              {baseScenario.totalLotAlphaInr >= 0 ? '+' : ''}₹{baseScenario.totalLotAlphaInr.toLocaleString('en-IN')}{' '}
+                              <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>({baseScenario.netAlphaPerQtl >= 0 ? '+' : ''}₹{baseScenario.netAlphaPerQtl}/qtl)</span>
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                              {lang === 'MR' ? 'एकूण खर्च:' : 'Carrying Cost:'} -₹{forecast.totalCarryingCostLotInr.toLocaleString('en-IN')} (₹{forecast.totalCarryingCostPerQtl}/qtl)
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Liquidity Bridge & Action Row */}
+                        <div style={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '4px',
+                          padding: '8px 10px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '8px'
+                        }}>
+                          <div style={{ fontSize: '0.72rem', color: '#334155' }}>
+                            <strong style={{ color: '#1e40af' }}>e-NWR Liquidity Bridge:</strong>{' '}
+                            {lang === 'MR'
+                              ? `शेतमाल न विकता ₹${forecast.enwrEligibleLoanAmountInr.toLocaleString('en-IN')} पर्यंत ७०% शासकीय गोदाम कर्ज (७% व्याज) मिळवा.`
+                              : `Unlock ₹${forecast.enwrEligibleLoanAmountInr.toLocaleString('en-IN')} (70% Govt Pledge Loan @ 7% p.a.) without distressed selling.`}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn-gov-secondary"
+                              style={{
+                                padding: '5px 10px',
+                                fontSize: '0.72rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                borderColor: '#bfdbfe',
+                                color: '#1d4ed8',
+                                backgroundColor: '#eff6ff',
+                                fontWeight: 600
+                              }}
+                              onClick={() => {
+                                setEnwrPrefillData({
+                                  commodity: lot.commodity,
+                                  quantity: lot.quantity_quintals,
+                                  price: lot.base_price_per_quintal,
+                                  warehouseName: `${lot.district} MSWC Nodal Warehouse`
+                                });
+                                setShowENWRModal(true);
+                              }}
+                            >
+                              <Percent size={12} /> {lang === 'MR' ? '७०% गोदाम कर्ज' : '70% e-NWR Loan'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn-gov-primary"
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '0.72rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: isColdChain ? '#0284c7' : '#059669',
+                                fontWeight: 600
+                              }}
+                              onClick={() => {
+                                const matchedFacility = storageFacilities.find(sf => {
+                                  if (isColdChain && sf.facility_type !== 'COLD_STORAGE') return false;
+                                  return sf.district.toLowerCase() === lot.district.toLowerCase();
+                                }) || storageFacilities[0] || null;
+
+                                setStorageModalFacility(matchedFacility);
+                                setStorageModalCommodity(lot.commodity);
+                                setStorageModalQty(lot.quantity_quintals);
+                                setShowStorageModal(true);
+                              }}
+                            >
+                              {isColdChain ? <Snowflake size={12} /> : <Warehouse size={12} />}
+                              {isColdChain 
+                                ? (lang === 'MR' ? 'शीतगृह जागा आरक्षित करा' : 'Book Cold Storage')
+                                : (lang === 'MR' ? 'गोदाम जागा आरक्षित करा' : 'Book Storage Space')}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* GAP 4: AUTOMATED AI BUYER MATCHMAKING ENGINE */}
                   {(() => {
@@ -1129,6 +1509,44 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     const topMatch = matches[0];
                     const isExpanded = expandedMatchLotId === lot.id;
                     const displayMatches = isExpanded ? matches : matches.slice(0, 2);
+
+                    if (matches.length === 0) {
+                      return (
+                        <div style={{ 
+                          backgroundColor: '#f8fafc', 
+                          border: '1px dashed #cbd5e1', 
+                          borderRadius: 'var(--radius-sm)', 
+                          padding: '10px 14px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '10px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Building2 size={16} color="#64748b" />
+                            <div>
+                              <strong style={{ fontSize: '0.8rem', color: '#334155' }}>
+                                {lang === 'MR' ? 'या लॉटसाठी अद्याप कोणतेही सक्रिय संस्थात्मक खरेदीदार मॅच नाहीत' : 'No Verified Corporate Buyers Matched Yet for this Lot'}
+                              </strong>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                {lang === 'MR' 
+                                  ? 'खरेदीदारांनी थेट खरेदी आदेश किंवा बोली लावल्यावर येथे आपोआप मॅच दिसतील.'
+                                  : 'Standing corporate purchase bids will automatically appear here once buyers place procurement mandates.'}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-gov-secondary"
+                            onClick={() => onNavigateToRFQs(lot)}
+                            style={{ fontSize: '0.72rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            {lang === 'MR' ? 'खरेदीदारांशी वाटाघाटी करा' : 'Open RFQ Desk'} <ArrowRight size={12} />
+                          </button>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div style={{ 
@@ -1274,22 +1692,47 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                 </div>
                               </div>
 
-                              {/* 1-Click Send Direct Lot Pitch Action */}
-                              <button
-                                className="btn-gov-primary"
-                                style={{ 
-                                  padding: '7px 14px', 
-                                  fontSize: '0.76rem', 
-                                  backgroundColor: '#059669',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                onClick={() => handleOpenPitchModal(lot, match)}
-                              >
-                                <Send size={13} /> {t.pitchLotBtn}
-                              </button>
+                              {/* Actions: MSAMB Audit Scorecard + 1-Click Pitch */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn-gov-secondary"
+                                  style={{ 
+                                    padding: '7px 10px', 
+                                    fontSize: '0.74rem', 
+                                    borderColor: '#a7f3d0', 
+                                    color: '#065f46', 
+                                    backgroundColor: '#ecfdf5',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap',
+                                    fontWeight: 600
+                                  }}
+                                  onClick={async () => {
+                                    const sc = await api.getBuyerScorecard(match.company_name);
+                                    setSelectedScorecard(sc);
+                                    setShowScorecardModal(true);
+                                  }}
+                                >
+                                  <ShieldCheck size={13} /> {lang === 'MR' ? 'MSAMB क्रेडेन्शियल' : 'MSAMB Audit'}
+                                </button>
+                                <button
+                                  className="btn-gov-primary"
+                                  style={{ 
+                                    padding: '7px 14px', 
+                                    fontSize: '0.76rem', 
+                                    backgroundColor: '#059669',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  onClick={() => handleOpenPitchModal(lot, match)}
+                                >
+                                  <Send size={13} /> {t.pitchLotBtn}
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1400,7 +1843,12 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
             {/* Dynamic Buyer Demand Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(buyerDemands.length > 0 ? buyerDemands.slice(0, 3) : (api as any).DEFAULT_BUYER_DEMANDS.slice(0, 3)).map((d: any) => {
+              {buyerDemands.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)' }}>
+                  {isMarathi ? 'सध्या कोणतीही थेट खरेदी मागणी उपलब्ध नाही.' : 'No active institutional buyer demands at this time.'}
+                </div>
+              ) : (
+                buyerDemands.slice(0, 3).map((d: any) => {
                 const rem = d.required_quantity_quintals - d.fulfilled_quantity_quintals;
                 const card = d.credibility_scorecard || (api as any).BUYER_CREDIBILITY_SCORECARDS[d.buyer_id];
                 return (
@@ -1467,7 +1915,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
 
             {/* Bottom Nav CTA to Buyer Demand Board */}
@@ -1769,6 +2217,28 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     >
                       <span>🤝</span> Contribute My Lot
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePool(pool.id)}
+                      title={isMarathi ? 'हा पूल हटवा' : 'Remove this Pool'}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '0.78rem',
+                        backgroundColor: '#fff1f2',
+                        color: '#e11d48',
+                        border: '1px solid #fecdd3',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <Trash2 size={14} /> {isMarathi ? 'हटवा' : 'Remove'}
+                    </button>
                   </div>
                 </div>
               );
@@ -1853,46 +2323,117 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                 </div>
               )}
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                  {t.commodityLabel}
-                </label>
-                <select 
-                  value={newCommodity} 
-                  onChange={(e) => {
-                    const c = e.target.value;
-                    setNewCommodity(c);
-                    if (c === 'Onion') { setNewVariety('Nasik Red (Garwa)'); setNewRate(2450); }
-                    else if (c === 'Soybean') { setNewVariety('JS-335 Certified'); setNewRate(4890); }
-                    else if (c === 'Tomato') { setNewVariety('Hybrid Abhinav'); setNewRate(1950); }
-                    else if (c === 'Wheat') { setNewVariety('Lokwan Desi Sharbati'); setNewRate(2810); }
-                    else if (c === 'Cotton') { setNewVariety('Medium Long Staple'); setNewRate(7120); }
-                  }}
-                >
-                  <option value="Onion">Onion (कांदा)</option>
-                  <option value="Soybean">Soybean (सोयाबीन)</option>
-                  <option value="Tomato">Tomato (टोमॅटो)</option>
-                  <option value="Wheat">Wheat (गहू)</option>
-                  <option value="Cotton">Cotton (कापूस)</option>
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.commodityLabel}
+                  </label>
+                  <select 
+                    value={newCommodity} 
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setNewCommodity(c);
+                      const info = COMMODITY_VARIETIES[c];
+                      if (info) {
+                        setNewVariety(info.varieties[0]);
+                        setNewRate(info.defaultRate);
+                        setNewMoisture(info.defaultMoisture);
+                        setNewHub(info.defaultHub);
+                      }
+                    }}
+                  >
+                    <option value="Onion">Onion (कांदा)</option>
+                    <option value="Soybean">Soybean (सोयाबीन)</option>
+                    <option value="Tomato">Tomato (टोमॅटो)</option>
+                    <option value="Wheat">Wheat (गहू)</option>
+                    <option value="Cotton">Cotton (कापूस)</option>
+                    <option value="Potato">Potato (बटाटा)</option>
+                    <option value="Banana">Banana (केळी)</option>
+                    <option value="Orange">Orange (संत्रा)</option>
+                    <option value="Pomegranate">Pomegranate (डाळिंब)</option>
+                    <option value="Garlic">Garlic (लसूण)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
+                    {t.varietyLabel}
+                  </label>
+                  <input 
+                    type="text"
+                    list="harvest-variety-list"
+                    value={newVariety}
+                    onChange={(e) => setNewVariety(e.target.value)}
+                    placeholder={lang === 'MR' ? 'उदा. गरवा / लाल कांदा' : 'e.g. Garwa / Nasik Red'}
+                    required
+                  />
+                  <datalist id="harvest-variety-list">
+                    {(COMMODITY_VARIETIES[newCommodity]?.varieties || []).map(v => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px', display: 'block' }}>
-                    {t.harvestVolumeLabel}
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', margin: 0 }}>
+                      {t.harvestVolumeLabel}
+                    </label>
+                    <div style={{ display: 'inline-flex', borderRadius: '4px', overflow: 'hidden', border: '1px solid #cbd5e1', fontSize: '0.66rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setNewVolumeUnit('QTL')}
+                        style={{
+                          padding: '1px 6px',
+                          backgroundColor: newVolumeUnit === 'QTL' ? '#059669' : '#f8fafc',
+                          color: newVolumeUnit === 'QTL' ? '#ffffff' : '#475569',
+                          border: 'none',
+                          fontWeight: newVolumeUnit === 'QTL' ? 700 : 500,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Qtl
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewVolumeUnit('MT')}
+                        style={{
+                          padding: '1px 6px',
+                          backgroundColor: newVolumeUnit === 'MT' ? '#059669' : '#f8fafc',
+                          color: newVolumeUnit === 'MT' ? '#ffffff' : '#475569',
+                          border: 'none',
+                          fontWeight: newVolumeUnit === 'MT' ? 700 : 500,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        MT
+                      </button>
+                    </div>
+                  </div>
                   <input 
                     type="number" 
-                    min={1}
+                    min={0.1}
+                    step={newVolumeUnit === 'MT' ? '0.1' : '1'}
                     value={newVolume} 
                     onChange={(e) => setNewVolume(e.target.value === '' ? '' : Number(e.target.value))} 
-                    placeholder="e.g. 25 MT"
+                    placeholder={newVolumeUnit === 'MT' ? 'e.g. 5 MT' : 'e.g. 50 Qtl'}
                     required
                   />
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                    = {newVolume ? Number(newVolume) * 10 : 0} Quintals
-                  </span>
+                  <div style={{ marginTop: '3px' }}>
+                    {newVolume !== '' && Number(newVolume) > 0 ? (
+                      <span style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>
+                        {newVolumeUnit === 'MT' 
+                          ? `≈ ${Math.round(Number(newVolume) * 10)} Quintals (${Math.round(Number(newVolume) * 1000)} kg)`
+                          : `≈ ${(Number(newVolume) / 10).toFixed(1)} MT (${Math.round(Number(newVolume) * 100)} kg)`}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                        {newVolumeUnit === 'MT' ? '1 MT = 10 Quintals (1,000 kg)' : '10 Quintals = 1 MT (1,000 kg)'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1906,6 +2447,9 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     placeholder="e.g. 2450 ₹/qtl"
                     required
                   />
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '3px', display: 'block' }}>
+                    {lang === 'MR' ? 'हमीभाव व बाजारभावानुसार सुचवलेला दर' : `Benchmark: ₹${COMMODITY_VARIETIES[newCommodity]?.defaultRate || 2000}/qtl`}
+                  </span>
                 </div>
               </div>
 
@@ -1957,10 +2501,16 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                   </label>
                   <input 
                     type="text" 
+                    list="hub-options-list"
                     value={newHub} 
                     onChange={(e) => setNewHub(e.target.value)} 
                     placeholder="e.g. Lasalgaon APMC Cold Hub"
                   />
+                  <datalist id="hub-options-list">
+                    {Array.from(new Set(Object.values(COMMODITY_VARIETIES).map(v => v.defaultHub))).map(h => (
+                      <option key={h} value={h} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -3072,7 +3622,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                           Consignor & Consignee
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#334155', lineHeight: 1.5 }}>
-                          <div><strong>Farmer / Seller:</strong> {activeLogisticsBooking.farmer_name || currentUser?.name || 'Ramesh B. Patil'}</div>
+                          <div><strong>Farmer / Seller:</strong> {activeLogisticsBooking.farmer_name || currentUser?.name || 'Farmer'}</div>
                           <div><strong>Buyer / Processor:</strong> {activeLogisticsBooking.buyer_name || 'ADM Agro Industries Pvt. Ltd.'}</div>
                           <div><strong>Pickup:</strong> {activeLogisticsBooking.pickup_location}</div>
                           <div><strong>Delivery Terminal:</strong> {activeLogisticsBooking.delivery_location}</div>
@@ -3282,6 +3832,33 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Cold Storage & WDRA Warehouse Space Reservation Modal */}
+      <StorageBookingModal
+        isOpen={showStorageModal}
+        onClose={() => setShowStorageModal(false)}
+        facility={storageModalFacility}
+        lang={lang}
+        currentUser={currentUser}
+        prefillCommodity={storageModalCommodity}
+        prefillQuantity={storageModalQty}
+        onBookingSuccess={(booking: StorageBooking) => {
+          setLotSuccessMsg(`✓ ${booking.facility_type === 'COLD_STORAGE' ? 'Cold storage' : 'Warehouse'} space allotted at ${booking.facility_name}! Gate Pass #${booking.id} issued.`);
+          setTimeout(() => setLotSuccessMsg(''), 7000);
+        }}
+      />
+
+      {/* e-NWR Warehouse Receipt Pledge Financing Modal */}
+      <ENWRPledgeLoanModal
+        isOpen={showENWRModal}
+        onClose={() => setShowENWRModal(false)}
+        lang={lang}
+        currentUser={currentUser}
+        initialCommodity={enwrPrefillData.commodity}
+        initialQuantity={enwrPrefillData.quantity}
+        initialPrice={enwrPrefillData.price}
+        initialWarehouseName={enwrPrefillData.warehouseName}
+      />
 
       {/* MSAMB Buyer Credibility Scorecard Modal */}
       <BuyerScorecardModal

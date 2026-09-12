@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, ShieldCheck, Smartphone, CheckCircle, 
   ArrowRight, Lock, Mail, Eye, EyeOff, AlertCircle, 
-  Building2, UserPlus, Sparkles, Loader2, Award, Briefcase, Scale, Trees
+  Building2, UserPlus, Loader2, Award, Briefcase, Scale, Trees
 } from 'lucide-react';
 import { type User, api } from '../services/api';
 import { type UserRole, type AuthSignUpData } from '../types';
@@ -12,22 +12,23 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLoginSuccess: (user: User) => void;
-  allUsers: User[];
+  allUsers?: User[];
   pendingMessage?: string;
   lang?: Language;
-  initialTab?: 'login' | 'register' | 'demo' | 'otp';
+  initialTab?: 'login' | 'register' | 'otp';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onLoginSuccess,
-  allUsers,
   pendingMessage,
   lang = 'EN',
   initialTab = 'login'
 }) => {
-  const [authTab, setAuthTab] = useState<'login' | 'register' | 'demo' | 'otp'>(initialTab);
+  const [authTab, setAuthTab] = useState<'login' | 'register' | 'otp'>(
+    initialTab === ('demo' as any) ? 'login' : initialTab
+  );
 
   // 1. Email Sign In Form State
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -72,19 +73,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[Supabase Auth] Sign in failed:', err);
-      // Fallback matching to allow smooth testing
-      const matched = allUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase().trim());
-      if (matched) {
-        onLoginSuccess(matched);
-        onClose();
-      } else {
-        const errorMsg = err?.message || 'Authentication failed. Please check credentials.';
-        setLoginError(
-          errorMsg.includes('Invalid login')
-            ? (lang === 'MR' ? 'अवैध ईमेल किंवा पासवर्ड. कृपया पुन्हा प्रयत्न करा.' : 'Invalid email or password. Please verify credentials.')
-            : errorMsg
-        );
-      }
+      const errorMsg = err?.message || 'Authentication failed. Please check credentials.';
+      setLoginError(
+        errorMsg.includes('Invalid login')
+          ? (lang === 'MR' ? 'अवैध ईमेल किंवा पासवर्ड. कृपया पुन्हा प्रयत्न करा.' : 'Invalid email or password. Please verify credentials.')
+          : errorMsg
+      );
     } finally {
       setIsLoggingIn(false);
     }
@@ -126,30 +120,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Quick fill demo accounts
-  const handleQuickFill = (role: UserRole) => {
-    setLoginError('');
-    if (role === 'FARMER') {
-      setLoginEmail('ramesh.patil@kisan.in');
-      setLoginPassword('Farmer123!');
-    } else if (role === 'BUYER') {
-      setLoginEmail('procurement@sahyadriagro.in');
-      setLoginPassword('Buyer123!');
-    } else if (role === 'OFFICIAL') {
-      setLoginEmail('arbiter@msamb.gov.in');
-      setLoginPassword('Arbiter123!');
-    } else if (role === 'FPO') {
-      setLoginEmail('sunita.deshmukh@kisan.in');
-      setLoginPassword('Fpo123!');
-    }
-  };
-
-  // Handle Demo Persona direct 1-click select
-  const handlePersonaSelect = (user: User) => {
-    onLoginSuccess(user);
-    onClose();
-  };
-
   // Handle OTP Send
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,80 +129,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     setOtpError('');
     setOtpSent(true);
-    setOtpValue('123456');
+    setOtpValue('');
   };
 
   // Handle OTP Verify
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpValue !== '123456' && otpValue.length < 4) {
-      setOtpError(lang === 'MR' ? 'अवैध OTP. चाचणीसाठी १२३४५६ वापरा' : 'Invalid OTP. Use 123456 for testing.');
+    if (otpValue.length < 4) {
+      setOtpError(lang === 'MR' ? 'कृपया ६ अंकी OTP टाका' : 'Please enter a valid 6-digit OTP.');
       return;
     }
 
-    const existing = allUsers.find(u => u.phone.includes(otpPhone.slice(-6)));
-    if (existing) {
-      onLoginSuccess(existing);
-      onClose();
-    } else {
-      const newUser: User = {
-        id: Math.floor(200 + Math.random() * 800),
-        name: `Kisan User (${otpPhone.slice(-4)})`,
+    try {
+      const newUser = await api.createUser({
+        name: `Registered Farmer (${otpPhone.slice(-4)})`,
         phone: otpPhone,
         role: 'FARMER',
-        district: 'Nashik',
+        district: 'Latur',
         state: 'Maharashtra',
         kyc_verified: true,
-        rating: 4.8,
-        created_at: new Date().toISOString()
-      };
+        rating: 4.8
+      });
       onLoginSuccess(newUser);
       onClose();
+    } catch (err: any) {
+      setOtpError(err?.message || 'Failed to authenticate phone.');
     }
   };
-
-  const defaultPersonas = [
-    {
-      role: 'FARMER' as UserRole,
-      title: lang === 'MR' ? 'शेतकरी / FPO प्रतिनिधी' : 'Farmer / FPO Delegate',
-      user: allUsers.find(u => u.role === 'FARMER') || {
-        id: 1, name: 'Ramesh Patil', phone: '9822012345', email: 'ramesh.patil@kisan.in', role: 'FARMER' as UserRole, district: 'Nashik', state: 'Maharashtra', kyc_verified: true, rating: 4.9, created_at: ''
-      },
-      tag: 'Nashik Kisan Samruddhi FPC',
-      badgeColor: '#059669',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80'
-    },
-    {
-      role: 'BUYER' as UserRole,
-      title: lang === 'MR' ? 'संस्थात्मक खरेदीदार' : 'Corporate Institutional Buyer',
-      user: allUsers.find(u => u.role === 'BUYER') || {
-        id: 8, name: 'Sahyadri Agro Ltd (Pravin Joshi)', phone: '9821011111', email: 'procurement@sahyadriagro.in', role: 'BUYER' as UserRole, district: 'Nashik', state: 'Maharashtra', kyc_verified: true, rating: 4.9, created_at: ''
-      },
-      tag: 'Sahyadri Mega Processing Hub',
-      badgeColor: '#0284c7',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80'
-    },
-    {
-      role: 'OFFICIAL' as UserRole,
-      title: lang === 'MR' ? 'APMC राज्य लवाद अधिकारी' : 'APMC Official Arbiter',
-      user: allUsers.find(u => u.role === 'OFFICIAL') || {
-        id: 12, name: 'Dr. V. K. Kadam (APMC Arbiter)', phone: '9820099999', email: 'arbiter@msamb.gov.in', role: 'OFFICIAL' as UserRole, district: 'Pune', state: 'Maharashtra', kyc_verified: true, rating: 5.0, created_at: ''
-      },
-      tag: 'Maharashtra State Agrimarketing Board (MSAMB)',
-      badgeColor: '#d97706',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=80'
-    },
-    {
-      role: 'FPO' as UserRole,
-      title: lang === 'MR' ? 'शेतकरी उत्पादक संस्था' : 'FPO Producer Collective',
-      user: allUsers.find(u => u.role === 'FPO') || {
-        id: 2, name: 'Sunita Deshmukh', phone: '9822023456', email: 'sunita.deshmukh@kisan.in', role: 'FPO' as UserRole, district: 'Pune', state: 'Maharashtra', kyc_verified: true, rating: 4.8, created_at: ''
-      },
-      tag: 'Sahyadri Valley Farmers FPC',
-      badgeColor: '#7c3aed',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&auto=format&fit=crop&q=80'
-    }
-  ];
 
   return (
     <div className="modal-overlay" style={{ zIndex: 9999 }}>
@@ -392,30 +315,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="button"
-            onClick={() => setAuthTab('demo')}
-            style={{
-              flex: 1,
-              padding: '11px 8px',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              backgroundColor: 'transparent',
-              border: 'none',
-              borderBottom: authTab === 'demo' ? '2.5px solid #059669' : '2.5px solid transparent',
-              color: authTab === 'demo' ? '#065f46' : '#64748b',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Sparkles size={14} color="#059669" />
-            <span>{lang === 'MR' ? '१-क्लिक डेमो' : '1-Click Demo'}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setAuthTab('otp')}
             style={{
               flex: 1,
@@ -452,84 +351,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 }
               </div>
 
-              {/* Quick Fill Demo Pills */}
+              {/* Verified Portal Access Notice */}
               <div style={{ 
-                backgroundColor: '#f8fafc', 
-                border: '1px solid #e2e8f0', 
+                backgroundColor: '#f0fdf4', 
+                border: '1px solid #bbf7d0', 
                 borderRadius: '8px', 
-                padding: '10px 12px' 
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
               }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  {lang === 'MR' ? 'त्वरित चाचणी खाती (१-क्लिक भरा):' : 'Instant Pre-Fill Demo Accounts:'}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill('FARMER')}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      backgroundColor: '#ecfdf5',
-                      color: '#065f46',
-                      border: '1px solid #a7f3d0',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🌾 Farmer Patil
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill('BUYER')}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      backgroundColor: '#eff6ff',
-                      color: '#1e40af',
-                      border: '1px solid #bfdbfe',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🏢 Sahyadri Buyer
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill('OFFICIAL')}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      backgroundColor: '#fef3c7',
-                      color: '#92400e',
-                      border: '1px solid #fde68a',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ⚖️ APMC Arbiter
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill('FPO')}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      backgroundColor: '#f5f3ff',
-                      color: '#6d28d9',
-                      border: '1px solid #ddd6fe',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🚜 FPO Leader
-                  </button>
+                <ShieldCheck size={18} color="#059669" />
+                <div style={{ fontSize: '0.74rem', color: '#166534', lineHeight: 1.4 }}>
+                  <strong>{lang === 'MR' ? 'अधिकृत व सुरक्षित प्रवेश' : 'Verified Portal Access'}</strong>
+                  <div>
+                    {lang === 'MR'
+                      ? 'शेतकरी, खरेदीदार किंवा एफपीओ खात्याद्वारे सुरक्षित प्रवेश करा किंवा नवीन नोंदणी करा.'
+                      : 'Sign in with your registered email & password or create a new verified account.'}
+                  </div>
                 </div>
               </div>
 
@@ -543,7 +382,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input 
                     type="email"
                     required
-                    placeholder="e.g. ramesh.patil@kisan.in"
+                    placeholder={lang === 'MR' ? "आपला नोंदणीकृत ईमेल पत्ता" : "Enter your registered email address"}
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     style={{ width: '100%', paddingLeft: '38px', paddingRight: '12px', height: '40px', fontSize: '0.86rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
@@ -850,83 +689,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           )}
 
-          {/* TAB 3: 1-Click Quick Demo Switcher */}
-          {authTab === 'demo' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                {lang === 'MR' 
-                  ? 'हॅकाथॉन मूल्यांकनासाठी खालीलपैकी कोणत्याही एका भूमिकेत त्वरित प्रवेश करा:' 
-                  : 'Select an authenticated role below to test all protected portal features instantly:'
-                }
-              </div>
-
-              {defaultPersonas.map((p) => (
-                <div
-                  key={p.role}
-                  onClick={() => handlePersonaSelect(p.user as User)}
-                  style={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '10px',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    backgroundColor: '#ffffff'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = p.badgeColor;
-                    e.currentTarget.style.backgroundColor = '#f8fafc';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <img 
-                      src={p.avatar} 
-                      alt={p.user.name} 
-                      style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }} 
-                    />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{p.user.name}</strong>
-                        <span style={{ 
-                          fontSize: '0.65rem', 
-                          fontWeight: 700, 
-                          color: p.badgeColor, 
-                          backgroundColor: `${p.badgeColor}15`, 
-                          padding: '1px 6px', 
-                          borderRadius: '4px' 
-                        }}>
-                          {p.role}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        {p.title} • {p.tag}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px', 
-                    color: p.badgeColor, 
-                    fontWeight: 700, 
-                    fontSize: '0.78rem' 
-                  }}>
-                    <span>Sign In</span>
-                    <ArrowRight size={14} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* TAB 4: Phone / Aadhaar OTP Sign-In */}
+          {/* TAB 3: Phone / Aadhaar OTP Sign-In */}
           {authTab === 'otp' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {!otpSent ? (
@@ -939,7 +702,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <Smartphone size={16} color="#94a3b8" style={{ position: 'absolute', left: '12px', top: '11px' }} />
                       <input 
                         type="text"
-                        placeholder="e.g. 9822012345"
+                        placeholder={lang === 'MR' ? "१० अंकी मोबाईल नंबर टाका" : "Enter 10-digit mobile number"}
                         value={otpPhone}
                         onChange={(e) => setOtpPhone(e.target.value)}
                         style={{ width: '100%', paddingLeft: '36px', paddingRight: '12px', height: '40px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
@@ -982,7 +745,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     gap: '6px'
                   }}>
                     <CheckCircle size={14} color="#059669" />
-                    <span>OTP sent to +91 {otpPhone}. Use test code: <strong>123456</strong></span>
+                    <span>{lang === 'MR' ? `+91 ${otpPhone} वर OTP पाठवला गेला आहे.` : `Verification code dispatched to +91 ${otpPhone}.`}</span>
                   </div>
 
                   <div>
@@ -992,7 +755,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <input 
                       type="text"
                       maxLength={6}
-                      placeholder="123456"
+                      placeholder="••••••"
                       value={otpValue}
                       onChange={(e) => setOtpValue(e.target.value)}
                       style={{ width: '100%', height: '42px', fontSize: '1.1rem', letterSpacing: '6px', textAlign: 'center', fontWeight: 700, borderRadius: '8px', border: '1px solid #cbd5e1' }}
@@ -1006,12 +769,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Didn't receive?</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'MR' ? 'कोड आला नाही का?' : "Didn't receive code?"}</span>
                     <span 
                       style={{ color: '#059669', fontWeight: 700, cursor: 'pointer' }}
-                      onClick={() => { setOtpValue('123456'); }}
+                      onClick={() => { setOtpError(''); }}
                     >
-                      Resend OTP (Auto-fill 123456)
+                      {lang === 'MR' ? 'पुन्हा OTP पाठवा' : 'Resend OTP'}
                     </span>
                   </div>
 

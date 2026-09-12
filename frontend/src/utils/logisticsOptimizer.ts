@@ -196,7 +196,7 @@ export const INITIAL_CONSIGNMENT_POOLS: ConsignmentPool[] = [
       {
         id: 'lot-p3',
         farmer_id: 8,
-        farmer_name: 'Rameshwar Pawar',
+        farmer_name: 'Kashinath Pawar',
         farmer_phone: '+91 97654 32110',
         village: 'Hinganghat APMC Hub',
         district: 'Wardha',

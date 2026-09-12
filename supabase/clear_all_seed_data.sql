@@ -27,6 +27,16 @@ TRUNCATE TABLE public.disputes RESTART IDENTITY CASCADE;
 -- 6. Remove all notification logs
 TRUNCATE TABLE public.notifications RESTART IDENTITY CASCADE;
 
+-- 7. Remove all prefilled / test users (Auth & Profiles), buyer demands and credibility scorecards
+TRUNCATE TABLE public.buyer_demands RESTART IDENTITY CASCADE;
+TRUNCATE TABLE public.buyer_scorecards RESTART IDENTITY CASCADE;
+TRUNCATE TABLE public.users RESTART IDENTITY CASCADE;
+DELETE FROM auth.users;
+
+-- 8. Remove all FPO collective pools and member allocations
+TRUNCATE TABLE public.fpo_pool_members RESTART IDENTITY CASCADE;
+TRUNCATE TABLE public.fpo_pools RESTART IDENTITY CASCADE;
+
 -- Re-enable RLS delete permissions for commodity_prices if needed
 DROP POLICY IF EXISTS "Allow delete on commodity prices" ON public.commodity_prices;
 CREATE POLICY "Allow delete on commodity prices" ON public.commodity_prices FOR DELETE USING (true);
@@ -46,4 +56,14 @@ SELECT 'escrow_payments', COUNT(*) FROM public.escrow_payments
 UNION ALL
 SELECT 'disputes', COUNT(*) FROM public.disputes
 UNION ALL
-SELECT 'notifications', COUNT(*) FROM public.notifications;
+SELECT 'notifications', COUNT(*) FROM public.notifications
+UNION ALL
+SELECT 'users', COUNT(*) FROM public.users
+UNION ALL
+SELECT 'buyer_scorecards', COUNT(*) FROM public.buyer_scorecards
+UNION ALL
+SELECT 'buyer_demands', COUNT(*) FROM public.buyer_demands
+UNION ALL
+SELECT 'fpo_pools', COUNT(*) FROM public.fpo_pools
+UNION ALL
+SELECT 'fpo_pool_members', COUNT(*) FROM public.fpo_pool_members;
