@@ -27,9 +27,9 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
 
   // Target Adjuster Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editTargetQty, setEditTargetQty] = useState<number>(5000);
+  const [editTargetQty, setEditTargetQty] = useState<number>(0);
   const [editCommodity, setEditCommodity] = useState<string>('Soybean');
-  const [editBenchmarkPrice, setEditBenchmarkPrice] = useState<number>(5220);
+  const [editBenchmarkPrice, setEditBenchmarkPrice] = useState<number>(4880);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
 
@@ -59,7 +59,7 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
 
   const handleSaveTarget = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editTargetQty || editTargetQty <= 0) return;
+    if (editTargetQty < 0) return;
 
     setIsSaving(true);
     try {
@@ -118,15 +118,15 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
   }
 
   const currentKPIs: CorporateProcurementKPIs = kpis || {
-    target_quintals: 5000,
-    procured_quintals: 3450,
-    fulfillment_pct: 69.0,
-    wap_achieved_per_qtl: 5080,
-    apmc_benchmark_per_qtl: 5220,
-    savings_per_qtl: 140,
-    total_net_savings_lakhs: 4.83,
+    target_quintals: 0,
+    procured_quintals: 0,
+    fulfillment_pct: 0,
+    wap_achieved_per_qtl: 0,
+    apmc_benchmark_per_qtl: 4880,
+    savings_per_qtl: 0,
+    total_net_savings_lakhs: 0,
     target_commodity: 'Soybean',
-    active_contracts_count: 4
+    active_contracts_count: 0
   };
 
   const remainingQuota = Math.max(currentKPIs.target_quintals - currentKPIs.procured_quintals, 0);
@@ -238,16 +238,24 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
                 {isMarathi ? 'मासिक खरेदी उद्दिष्ट प्रगती' : 'Monthly Procurement Target Progress'}
               </div>
               <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-                {currentKPIs.procured_quintals.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>/ {currentKPIs.target_quintals.toLocaleString()} Qtl ({currentKPIs.target_commodity})</span>
+                {currentKPIs.target_quintals > 0 ? (
+                  <>
+                    {currentKPIs.procured_quintals.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>/ {currentKPIs.target_quintals.toLocaleString()} Qtl ({currentKPIs.target_commodity})</span>
+                  </>
+                ) : (
+                  <>
+                    0 Qtl Sourced <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>({currentKPIs.target_commodity})</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <div style={{ textAlign: 'right' }}>
             <span style={{
-              backgroundColor: currentKPIs.fulfillment_pct >= 80 ? '#ecfdf5' : '#f0fdf4',
-              color: '#065f46',
-              border: '1px solid #a7f3d0',
+              backgroundColor: currentKPIs.fulfillment_pct >= 80 ? '#ecfdf5' : '#f8fafc',
+              color: currentKPIs.fulfillment_pct > 0 ? '#065f46' : '#64748b',
+              border: currentKPIs.fulfillment_pct > 0 ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
               padding: '3px 10px',
               borderRadius: '20px',
               fontSize: '0.8rem',
@@ -256,9 +264,11 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
               {currentKPIs.fulfillment_pct}% {isMarathi ? 'पूर्ण झाले' : 'Fulfilled'}
             </span>
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-              {remainingQuota > 0 
-                ? (isMarathi ? `उर्वरित कोटा: ${remainingQuota.toLocaleString()} क्विंटल` : `${remainingQuota.toLocaleString()} Qtl to meet capacity`)
-                : (isMarathi ? 'उद्दिष्ट १००% साध्य झाले!' : 'Capacity 100% Sourced!')
+              {currentKPIs.target_quintals > 0 
+                ? (remainingQuota > 0 
+                    ? (isMarathi ? `उर्वरित कोटा: ${remainingQuota.toLocaleString()} क्विंटल` : `${remainingQuota.toLocaleString()} Qtl to meet capacity`)
+                    : (isMarathi ? 'उद्दिष्ट १००% साध्य झाले!' : 'Capacity 100% Sourced!'))
+                : (isMarathi ? 'मासिक खरेदी उद्दिष्ट सेट करा' : 'Click "Adjust Monthly Target" to set capacity quota')
               }
             </div>
           </div>
@@ -287,7 +297,7 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
         {/* Progress Breakdown Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '0.72rem', color: '#64748b' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669', display: 'inline-block' }} />
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentKPIs.procured_quintals > 0 ? '#059669' : '#94a3b8', display: 'inline-block' }} />
             {isMarathi ? 'थेट करार व एस्क्रो लॉक' : 'Committed Direct Contracts'}: <strong>{currentKPIs.procured_quintals.toLocaleString()} Qtl</strong>
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -324,9 +334,14 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
             ₹{currentKPIs.wap_achieved_per_qtl.toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>/ Qtl</span>
           </div>
 
-          <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-            <CheckCircle2 size={12} />
-            <span>{isMarathi ? 'थेट FPO खरेदीद्वारे निश्चित' : 'Achieved via Direct Reverse-RFQ'}</span>
+          <div style={{ fontSize: '0.72rem', color: currentKPIs.wap_achieved_per_qtl > 0 ? '#059669' : '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <CheckCircle2 size={12} color={currentKPIs.wap_achieved_per_qtl > 0 ? '#059669' : '#94a3b8'} />
+            <span>
+              {currentKPIs.wap_achieved_per_qtl > 0 
+                ? (isMarathi ? 'थेट FPO खरेदीद्वारे निश्चित' : 'Achieved via Direct Reverse-RFQ')
+                : (isMarathi ? 'कोणताही खरेदी करार झालेला नाही' : 'No procurement executed yet')
+              }
+            </span>
           </div>
         </div>
 
@@ -351,10 +366,14 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
             ₹{currentKPIs.apmc_benchmark_per_qtl.toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>/ Qtl</span>
           </div>
 
-          <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700 }}>
-            {isMarathi 
-              ? `थेट फायदा: ₹${currentKPIs.savings_per_qtl}/क्विंटल बचत` 
-              : `Direct Advantage: ₹${currentKPIs.savings_per_qtl}/Qtl lower vs spot`
+          <div style={{ fontSize: '0.72rem', color: currentKPIs.savings_per_qtl > 0 ? '#166534' : '#64748b', fontWeight: 700 }}>
+            {currentKPIs.savings_per_qtl > 0 
+              ? (isMarathi 
+                ? `थेट फायदा: ₹${currentKPIs.savings_per_qtl}/क्विंटल निव्वळ बचत (APMC लँडेड खर्चाविरुद्ध)` 
+                : `Direct Advantage: ₹${currentKPIs.savings_per_qtl}/Qtl savings vs APMC landed cost`)
+              : (isMarathi 
+                ? `थेट एपीएमसी स्पॉट बेंचमार्क (${currentKPIs.target_commodity})` 
+                : `Live Agmarknet APMC Spot Rate (${currentKPIs.target_commodity})`)
             }
           </div>
         </div>
@@ -382,9 +401,14 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
           </div>
 
           <div style={{ fontSize: '0.71rem', color: '#047857', lineHeight: 1.3 }}>
-            {isMarathi 
-              ? 'मध्यस्थ दलाली (२.५%) आणि बाजार शुल्क शून्य' 
-              : 'Zero trader commission + direct farmgate quality retention'}
+            {currentKPIs.total_net_savings_lakhs > 0
+              ? (isMarathi 
+                ? '३.५% बाजार शुल्क व दलाली शून्य + थेट खरेदी फायदा' 
+                : 'Zero 3.5% APMC cess/dalali + direct price arbitrage')
+              : (isMarathi 
+                ? 'थेट खरेदी करार पूर्ण झाल्यावर निव्वळ बचत मोजली जाईल' 
+                : 'Zero intermediary savings until direct contracts are fulfilled')
+            }
           </div>
         </div>
       </div>
@@ -472,7 +496,14 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
                   </label>
                   <select
                     value={editCommodity}
-                    onChange={(e) => setEditCommodity(e.target.value)}
+                    onChange={(e) => {
+                      const chosen = e.target.value;
+                      setEditCommodity(chosen);
+                      const benchmark = api.getBenchmarkForCommodity(chosen);
+                      if (benchmark > 0) {
+                        setEditBenchmarkPrice(benchmark);
+                      }
+                    }}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
@@ -481,11 +512,12 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
                       fontSize: '0.88rem'
                     }}
                   >
-                    <option value="Soybean">Soybean (सोयाबीन)</option>
-                    <option value="Cotton">Cotton (कापूस)</option>
-                    <option value="Gram">Gram / Chana (हरभरा)</option>
-                    <option value="Wheat">Wheat (गहू)</option>
-                    <option value="Onion">Onion (कांदा)</option>
+                    <option value="Soybean">Soybean (सोयाबीन) — APMC Benchmark: ₹4,880/Qtl</option>
+                    <option value="Cotton">Cotton (कापूस) — APMC Benchmark: ₹7,220/Qtl</option>
+                    <option value="Gram">Gram / Chana (हरभरा) — APMC Benchmark: ₹5,510/Qtl</option>
+                    <option value="Wheat">Wheat (गहू) — APMC Benchmark: ₹2,480/Qtl</option>
+                    <option value="Onion">Onion (कांदा) — APMC Benchmark: ₹1,860/Qtl</option>
+                    <option value="Maize">Maize (मका) — APMC Benchmark: ₹2,260/Qtl</option>
                   </select>
                 </div>
 
@@ -495,7 +527,7 @@ export const CorporateProcurementDashboard: React.FC<CorporateProcurementDashboa
                   </label>
                   <input
                     type="number"
-                    min="100"
+                    min="0"
                     step="50"
                     value={editTargetQty}
                     onChange={(e) => setEditTargetQty(Number(e.target.value))}

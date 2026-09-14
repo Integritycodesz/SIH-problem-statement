@@ -53,7 +53,7 @@ class SARIMAXExogenousForecaster:
         msp_benchmark_floor: Optional[float] = None
     ) -> SARIMAXForecastResponse:
         spot = float(max(500.0, current_spot_price))
-        msp = float(msp_benchmark_floor or spot * 0.95)
+        msp = float(msp_benchmark_floor) if isinstance(msp_benchmark_floor, (int, float)) and msp_benchmark_floor > 0 else float(spot * 0.95)
 
         # 1. Fetch Exogenous Regressors
         weather = IMDWeatherService.get_district_weather(district)

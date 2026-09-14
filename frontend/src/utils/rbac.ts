@@ -67,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: false,
     canEscalateDispute: true,
-    primaryTabs: ['farmer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
+    primaryTabs: ['farmer', 'buyer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
     defaultTab: 'farmer'
   },
   FPO: {
@@ -89,7 +89,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     canFileDispute: true,
     canArbitrateDispute: false,
     canEscalateDispute: true,
-    primaryTabs: ['farmer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
+    primaryTabs: ['farmer', 'buyer', 'demands', 'rfq', 'intelligence', 'contracts', 'disputes'],
     defaultTab: 'farmer'
   },
   BUYER: {

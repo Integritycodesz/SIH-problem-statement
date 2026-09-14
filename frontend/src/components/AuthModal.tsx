@@ -141,8 +141,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
+      const cleanPhone = otpPhone.replace(/\D/g, '').slice(-10);
+      const usersList = await api.getUsers();
+      const existingUser = usersList.find((u: any) => u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanPhone);
+
+      if (existingUser) {
+        onLoginSuccess(existingUser);
+        onClose();
+        return;
+      }
+
       const newUser = await api.createUser({
-        name: `Registered Farmer (${otpPhone.slice(-4)})`,
+        name: `Registered Farmer (${cleanPhone.slice(-4)})`,
         phone: otpPhone,
         role: 'FARMER',
         district: 'Latur',

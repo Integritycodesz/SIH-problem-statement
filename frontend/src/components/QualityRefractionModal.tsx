@@ -49,6 +49,7 @@ export const QualityRefractionModal: React.FC<QualityRefractionModalProps> = ({
   const [foreignMatterPct, setForeignMatterPct] = useState<number>(1.8);
   const [damagedPct, setDamagedPct] = useState<number>(1.5);
   const [activeTab, setActiveTab] = useState<'CALCULATOR' | 'SCHEDULE' | 'SLIP'>('CALCULATOR');
+  const [slipId] = useState<string>(() => String(Date.now()).slice(-6));
 
   // Single-page print body class management
   useEffect(() => {
@@ -783,7 +784,7 @@ export const QualityRefractionModal: React.FC<QualityRefractionModalProps> = ({
                     {isMarathi ? 'तपशीलवार गुणवत्ता अपवर्तन पावती (Quality Refraction Deduction Slip)' : 'Official Mill Weighbridge Quality Refraction Slip'}
                   </h4>
                   <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    Slip No: AGC-REF-{Date.now().toString().slice(-6)} | Date: {new Date().toLocaleDateString('en-IN')}
+                    Slip No: AGC-REF-{slipId} | Date: {new Date().toLocaleDateString('en-IN')}
                   </div>
                 </div>
 

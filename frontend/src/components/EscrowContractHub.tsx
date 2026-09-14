@@ -58,22 +58,31 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
 
   const loadContracts = async () => {
     try {
-      const res = await api.getContracts();
-      setContracts(res);
-      if (res.length > 0) {
+      const res = await api.getContracts(currentUser?.id, currentUser?.role);
+      let userContracts = res;
+      if (currentUser?.role === 'FARMER') {
+        userContracts = res.filter(c => c.farmer_id === currentUser.id || c.farmer_name === currentUser.name);
+      } else if (currentUser?.role === 'BUYER') {
+        userContracts = res.filter(c => c.buyer_id === currentUser.id || c.buyer_name === currentUser.name);
+      }
+      setContracts(userContracts);
+      if (userContracts.length > 0) {
         if (initialContractId) {
-          const match = res.find(c => c.id === initialContractId);
+          const match = userContracts.find(c => c.id === initialContractId);
           if (match) {
             setSelectedContract(match);
             return;
           }
         }
         if (!selectedContract) {
-          setSelectedContract(res[0]);
+          setSelectedContract(userContracts[0]);
         } else {
-          const updated = res.find(c => c.id === selectedContract.id);
+          const updated = userContracts.find(c => c.id === selectedContract.id);
           if (updated) setSelectedContract(updated);
+          else setSelectedContract(userContracts[0]);
         }
+      } else {
+        setSelectedContract(null);
       }
     } catch (e) {
       console.error('Error loading contracts:', e);
@@ -82,6 +91,26 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
 
   const handleSign = async (role: 'FARMER' | 'BUYER') => {
     if (!selectedContract || !currentUser) return;
+    if (role === 'FARMER') {
+      if (currentUser.role !== 'FARMER' && currentUser.role !== 'FPO' && (currentUser.role as string) !== 'ADMIN') {
+        alert('Access restricted: Only the registered farmer/producer can sign as seller.');
+        return;
+      }
+      if (currentUser.role === 'FARMER' && selectedContract.farmer_id !== currentUser.id && selectedContract.farmer_name !== currentUser.name) {
+        alert('Access restricted: You can only sign contracts issued to your own farmer account.');
+        return;
+      }
+    }
+    if (role === 'BUYER') {
+      if (currentUser.role !== 'BUYER' && (currentUser.role as string) !== 'ADMIN') {
+        alert('Access restricted: Only the designated institutional buyer can sign as buyer.');
+        return;
+      }
+      if (currentUser.role === 'BUYER' && selectedContract.buyer_id !== currentUser.id && selectedContract.buyer_name !== currentUser.name) {
+        alert('Access restricted: You can only sign contracts issued to your corporate buyer account.');
+        return;
+      }
+    }
     setActionLoading(true);
     try {
       const updated = await api.signContract(selectedContract.id, {
@@ -155,7 +184,7 @@ export const EscrowContractHub: React.FC<EscrowContractHubProps> = ({
   };
 
   // Determine active operating persona
-  const activeRole = currentUser?.role || 'FARMER';
+  const activeRole = currentUser?.role || 'GUEST';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>

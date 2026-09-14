@@ -80,6 +80,7 @@ export function calculateConsignmentFreight(
 ): {
   totalLoadedQuintals: number;
   utilizationPct: number;
+  isOverloaded: boolean;
   totalFreightInr: number;
   pooledRatePerQtl: number;
   avgIndividualRatePerQtl: number;
@@ -89,7 +90,8 @@ export function calculateConsignmentFreight(
   enrichedLots: PooledLotItem[];
 } {
   const totalLoadedQuintals = lots.reduce((acc, curr) => acc + curr.quantity_quintals, 0);
-  const utilizationPct = Math.min(100, Math.round((totalLoadedQuintals / vehicle.capacity_quintals) * 1000) / 10);
+  const utilizationPct = Math.round((totalLoadedQuintals / vehicle.capacity_quintals) * 1000) / 10;
+  const isOverloaded = totalLoadedQuintals > vehicle.capacity_quintals;
   
   // Total trip freight cost
   const totalFreightInr = Math.round(Math.max(vehicle.base_rate_per_km * distanceKm, vehicle.base_rate_per_km * vehicle.min_distance_km));
@@ -125,6 +127,7 @@ export function calculateConsignmentFreight(
   return {
     totalLoadedQuintals,
     utilizationPct,
+    isOverloaded,
     totalFreightInr,
     pooledRatePerQtl,
     avgIndividualRatePerQtl,

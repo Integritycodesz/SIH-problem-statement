@@ -150,7 +150,11 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
           </div>
           <h2 style={{ fontSize: '1.65rem', color: '#0f172a' }}>{t.marketplaceTitle}</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {t.marketplaceSubtitle}
+            {(currentUser?.role === 'FARMER' || currentUser?.role === 'FPO')
+              ? (lang === 'MR'
+                  ? 'सर्व शेतकरी व FPO चा नोंदणीकृत शेतमाल, थेट बाजारभाव, NABL गुणवत्ता प्रत व साठ्याची उपलब्धता पहा.'
+                  : 'Explore all registered harvest batches, compare mandi price parity, and inspect NABL quality assays across Maharashtra.')
+              : t.marketplaceSubtitle}
           </p>
         </div>
 
@@ -436,19 +440,56 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                      <button 
-                        className="btn-gov-primary"
-                        style={{ 
-                          flex: 1, 
-                          justifyContent: 'center', 
-                          padding: '9px', 
-                          fontSize: '0.8rem',
-                          backgroundColor: '#065f46'
-                        }}
-                        onClick={() => handleSelectLot(lot)}
-                      >
-                        <Zap size={14} /> {t.openOfferNegotiate}
-                      </button>
+                      {(currentUser?.role === 'FARMER' || currentUser?.role === 'FPO') ? (
+                        (currentUser && (lot.farmer_id === currentUser.id || lot.farmer_name === currentUser.name)) ? (
+                          <div style={{ 
+                            flex: 1, 
+                            textAlign: 'center', 
+                            padding: '9px', 
+                            fontSize: '0.8rem',
+                            backgroundColor: '#ecfdf5',
+                            color: '#065f46',
+                            borderRadius: 'var(--radius-sm)',
+                            fontWeight: 700,
+                            border: '1px solid #a7f3d0'
+                          }}>
+                            {lang === 'MR' ? '✓ तुमचा शेतमाल' : '✓ Your Listed Batch'}
+                          </div>
+                        ) : (
+                          <button 
+                            className="btn-gov-secondary"
+                            style={{ 
+                              flex: 1, 
+                              justifyContent: 'center', 
+                              padding: '9px', 
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              borderColor: '#cbd5e1',
+                              backgroundColor: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                            onClick={() => setAssayModalLot(lot)}
+                          >
+                            <Eye size={14} /> {lang === 'MR' ? 'तपशील व प्रत पहा' : 'Inspect Quality & Specs'}
+                          </button>
+                        )
+                      ) : (
+                        <button 
+                          className="btn-gov-primary"
+                          style={{ 
+                            flex: 1, 
+                            justifyContent: 'center', 
+                            padding: '9px', 
+                            fontSize: '0.8rem',
+                            backgroundColor: '#065f46'
+                          }}
+                          onClick={() => handleSelectLot(lot)}
+                        >
+                          <Zap size={14} /> {t.openOfferNegotiate}
+                        </button>
+                      )}
                       <button 
                         className="btn-gov-secondary" 
                         style={{ padding: '9px 12px' }}
@@ -684,13 +725,30 @@ export const BuyerDiscovery: React.FC<BuyerDiscoveryProps> = ({
                   <Sparkles size={14} /> AI Quality Assay
                 </button>
 
-                <button
-                  className="btn-gov-primary"
-                  onClick={() => handleInitiateBulkRFQ(pool)}
-                  style={{ flex: 1, minWidth: '170px', padding: '9px 14px', fontSize: '0.8rem', backgroundColor: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                >
-                  <Zap size={14} /> Initiate Bulk RFQ ({pool.collected_volume_quintals} Qtl)
-                </button>
+                {currentUser?.role === 'FARMER' ? (
+                  <div style={{
+                    flex: 1,
+                    minWidth: '170px',
+                    padding: '9px 14px',
+                    fontSize: '0.8rem',
+                    backgroundColor: '#eff6ff',
+                    color: '#1e40af',
+                    borderRadius: 'var(--radius-sm)',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    border: '1px solid #bfdbfe'
+                  }}>
+                    {lang === 'MR' ? '✓ FPO संकलन पूल' : '✓ FPO Aggregated Pool'}
+                  </div>
+                ) : (
+                  <button
+                    className="btn-gov-primary"
+                    onClick={() => handleInitiateBulkRFQ(pool)}
+                    style={{ flex: 1, minWidth: '170px', padding: '9px 14px', fontSize: '0.8rem', backgroundColor: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <Zap size={14} /> Initiate Bulk RFQ ({pool.collected_volume_quintals} Qtl)
+                  </button>
+                )}
               </div>
             </div>
           );

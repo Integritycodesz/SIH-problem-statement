@@ -18,11 +18,9 @@ export const APMCJFormModal: React.FC<APMCJFormModalProps> = ({
   isOpen,
   onClose,
   contractId,
-  contract: _contract,
+  contract,
   lang = 'EN'
 }) => {
-  if (!isOpen) return null;
-
   const isMarathi = lang === 'MR';
   const [jForm, setJForm] = useState<APMCJFormRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -30,7 +28,7 @@ export const APMCJFormModal: React.FC<APMCJFormModalProps> = ({
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    api.getAPMCJFormForContract(contractId)
+    api.getAPMCJFormForContract(contractId, contract)
       .then(res => {
         if (mounted) setJForm(res);
       })
@@ -41,7 +39,9 @@ export const APMCJFormModal: React.FC<APMCJFormModalProps> = ({
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, [contractId]);
+  }, [contractId, contract]);
+
+  if (!isOpen) return null;
 
   return (
     <div 

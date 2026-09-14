@@ -213,6 +213,17 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
       return;
     }
 
+    if (currentUser.role === 'BUYER') {
+      alert(isMarathi ? 'खरेदीदार थेट स्वतःची किंवा इतर संस्थांची मागणी पूर्ण करू शकत नाहीत. कृपया शेतकरी किंवा FPO खात्याने पुरवठा करा.' : 'Access restricted: Institutional Buyers cannot commit produce against corporate demands. Please use a verified Farmer or FPO account.');
+      return;
+    }
+
+    const remainingNeeded = targetDemand.required_quantity_quintals - (targetDemand.fulfilled_quantity_quintals || 0);
+    if (qty > remainingNeeded) {
+      alert(isMarathi ? `कमाल अनुमत वजन ${remainingNeeded} क्विंटल आहे. आपण ${qty} क्विंटल भरू शकत नाही.` : `Commitment exceeds tender requirements. Maximum available quota is ${remainingNeeded} Quintals.`);
+      return;
+    }
+
     setIsFulfilling(true);
     try {
       const effectiveRefraction = enableRefractionPreCheck
@@ -270,6 +281,11 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
       } else {
         alert(isMarathi ? 'कृपया प्रथम खरेदीदार म्हणून लॉगिन करा.' : 'Please sign in as a verified Buyer to post procurement demands.');
       }
+      return;
+    }
+
+    if (currentUser.role !== 'BUYER' && (currentUser.role as string) !== 'ADMIN') {
+      alert(isMarathi ? 'केवळ नोंदणीकृत संस्थात्मक खरेदीदारच खरेदी निविदा प्रकाशित करू शकतात.' : 'Access restricted: Only verified Institutional Buyers or State Administrators can publish procurement demands.');
       return;
     }
 
@@ -728,7 +744,7 @@ export const BuyerDemandBoard: React.FC<BuyerDemandBoardProps> = ({
           {filteredDemands.map((demand) => {
             const cropImg = getCropImage(demand.commodity);
             const remainingQty = Math.max(demand.required_quantity_quintals - demand.fulfilled_quantity_quintals, 0);
-            const fulfillmentPct = Math.min(Math.round((demand.fulfilled_quantity_quintals / demand.required_quantity_quintals) * 100), 100);
+            const fulfillmentPct = Math.min(Math.round(((demand.fulfilled_quantity_quintals || 0) / (demand.required_quantity_quintals || 1)) * 100), 100);
             const scorecard = demand.credibility_scorecard || (api as any).BUYER_CREDIBILITY_SCORECARDS[demand.buyer_id];
 
             return (

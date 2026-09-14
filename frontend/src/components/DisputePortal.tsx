@@ -130,11 +130,26 @@ export const DisputePortal: React.FC<DisputePortalProps> = ({
 
   const handleResolve = async (tier: string) => {
     if (!selectedDispute) return;
+    const isAuthorized = currentUser?.role === 'OFFICIAL' || (currentUser?.role as string) === 'ADMIN';
+    if (!isAuthorized) {
+      alert(lang === 'MR' ? 'केवळ APMC अधिकृत लवाद किंवा प्रशासक निकाल देऊ शकतात.' : 'Only APMC arbitration officials or administrators can finalize dispute rulings.');
+      return;
+    }
+
+    const claimedMax = selectedDispute.claimed_deduction || 1000000;
+    const adjNumber = Number(arbitrationAdjustment) || 0;
+    if (adjNumber < 0 || adjNumber > claimedMax) {
+      alert(lang === 'MR' 
+        ? `लवाद कपात रक्कम ₹0 आणि दावा केलेली कमाल रक्कम ₹${claimedMax.toLocaleString('en-IN')} च्या दरम्यान असणे आवश्यक आहे.` 
+        : `Arbitration adjustment must be between ₹0 and the claimed maximum ₹${claimedMax.toLocaleString('en-IN')}.`);
+      return;
+    }
+
     try {
       const resolved = await api.resolveDispute(selectedDispute.id, {
         tier: tier,
         status: 'RESOLVED',
-        agreed_adjustment: Number(arbitrationAdjustment) || 0,
+        agreed_adjustment: adjNumber,
         arbiter_ruling: arbiterRulingNotes || (lang === 'MR' ? 'बाजार समिती लवाद निकाल मान्य करण्यात आला.' : 'APMC statutory arbitration settlement completed.')
       });
       setArbitrationAdjustment('');

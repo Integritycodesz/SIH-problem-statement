@@ -70,7 +70,7 @@ export const PreHarvestForwardContractModal: React.FC<PreHarvestForwardContractM
     activeOffer.upside_sharing_percent
   );
 
-  const totalContractValue = committedQuantity * simResult.final_farmer_price_per_qtl;
+  const totalContractValue = committedQuantity * activeOffer.pre_harvest_contract_price;
   const sowingAdvanceInr = Math.round(totalContractValue * (activeOffer.sowing_advance_percent / 100));
 
   const handlePrint = () => {

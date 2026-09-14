@@ -5,7 +5,7 @@ import {
   MessageSquare, Building2, X, QrCode, Check,
   Trash2, AlertTriangle, Users, Sparkles,
   Truck, Send, Navigation, FileText,
-  Warehouse, Snowflake, Percent
+  Warehouse, Snowflake, Percent, Store
 } from 'lucide-react';
 import { 
   api, 
@@ -34,6 +34,7 @@ interface FarmerPortalProps {
   currentUser: User | null;
   onNavigateToRFQs: (lot?: ProduceLot) => void;
   onNavigateToDemands?: () => void;
+  onNavigateToMarketplace?: () => void;
   lang?: Language;
   onRequireAuth?: (message?: string, onComplete?: () => void) => void;
   initialLotPrefill?: { commodity: string; variety?: string; price: number; mandi?: string } | null;
@@ -124,6 +125,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   currentUser, 
   onNavigateToRFQs, 
   onNavigateToDemands,
+  onNavigateToMarketplace,
   lang = 'EN', 
   onRequireAuth,
   initialLotPrefill
@@ -140,7 +142,6 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   const [lotSuccessMsg, setLotSuccessMsg] = useState<string>('');
   const [deleteConfirmLot, setDeleteConfirmLot] = useState<ProduceLot | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState<boolean>(false);
-  const [lotFilterTab, setLotFilterTab] = useState<'ALL' | 'MY'>('ALL');
 
   // Option 1 & 2: FPO Batch Pooling & Kisan Vision AI State
   const [activeMainTab, setActiveMainTab] = useState<'LOTS' | 'FPO_POOLS'>('LOTS');
@@ -244,18 +245,29 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
 
   const loadData = async () => {
     try {
+      const isFarmerUser = currentUser?.role === 'FARMER';
       const [allLots, allRfqs, allContracts, allMsp, allPools, allDemands, allStorage] = await Promise.all([
         api.getLots(),
-        api.getRFQs(),
-        api.getContracts(),
+        api.getRFQs(undefined, currentUser?.id),
+        api.getContracts(currentUser?.id, currentUser?.role),
         api.getMSPFloorPrices().catch(() => []),
         api.getPooledBatches().catch(() => []),
         api.getBuyerDemands().catch(() => []),
         api.getStorageFacilities().catch(() => [])
       ]);
       setLots(allLots);
-      setRfqs(allRfqs);
-      setContracts(allContracts);
+
+      // Scoped RFQs and Contracts for authenticated farmers
+      const scopedRfqs = isFarmerUser && currentUser
+        ? allRfqs.filter(r => r.farmer_id === currentUser.id || r.farmer_name === currentUser.name)
+        : allRfqs;
+      setRfqs(scopedRfqs);
+
+      const scopedContracts = isFarmerUser && currentUser
+        ? allContracts.filter(c => c.farmer_id === currentUser.id || c.farmer_name === currentUser.name)
+        : allContracts;
+      setContracts(scopedContracts);
+
       setMspPrices(allMsp);
       setFpoPools(allPools);
       setBuyerDemands(allDemands);
@@ -328,6 +340,18 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       return;
     }
 
+    const remainingPoolCap = contributeModalPool.target_volume_quintals - contributeModalPool.collected_volume_quintals;
+    if (qty > remainingPoolCap) {
+      alert(`Cannot contribute ${qty} Qtl: This collective pool only requires ${remainingPoolCap} Qtl to complete target.`);
+      return;
+    }
+
+    const selectedLot = contributeSelectedLotId ? lots.find(l => l.id === Number(contributeSelectedLotId)) : null;
+    if (selectedLot && qty > selectedLot.quantity_quintals) {
+      alert(`Selected harvest lot only has ${selectedLot.quantity_quintals} Qtl available. You cannot contribute ${qty} Qtl.`);
+      return;
+    }
+
     try {
       const updated = await api.contributeLotToPool(contributeModalPool.id, {
         farmerId: currentUser.id,
@@ -338,6 +362,10 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
         lotId: contributeSelectedLotId ? Number(contributeSelectedLotId) : undefined,
         grade: contributeModalPool.quality_grade
       });
+
+      if (selectedLot) {
+        setLots(prevLots => prevLots.map(l => l.id === selectedLot.id ? { ...l, quantity_quintals: Math.max(0, l.quantity_quintals - qty) } : l));
+      }
 
       setFpoPools(prev => prev.map(p => p.id === updated.id ? updated : p));
       setContributeModalPool(null);
@@ -471,6 +499,11 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       if (onRequireAuth) onRequireAuth('Please sign in to submit a counter-offer.');
       return;
     }
+    const rfq = rfqs.find(r => r.id === rfqId);
+    if (rfq && currentUser.role === 'FARMER' && rfq.farmer_id !== currentUser.id && rfq.farmer_name !== currentUser.name) {
+      alert(lang === 'MR' ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाच्या ऑफरवर वाटाघाटी करू शकता.' : 'Access restricted: You cannot counter on another farmer\'s RFQ.');
+      return;
+    }
     try {
       await api.counterOffer(rfqId, {
         sender_id: currentUser.id,
@@ -487,6 +520,15 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
   };
 
   const handleFarmerAccept = async (rfqId: number) => {
+    if (!currentUser) {
+      if (onRequireAuth) onRequireAuth('Please sign in to accept an offer.');
+      return;
+    }
+    const rfq = rfqs.find(r => r.id === rfqId);
+    if (rfq && currentUser.role === 'FARMER' && rfq.farmer_id !== currentUser.id && rfq.farmer_name !== currentUser.name) {
+      alert(lang === 'MR' ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाचा करार स्वीकारू शकता.' : 'Access restricted: You cannot accept an offer on another farmer\'s RFQ.');
+      return;
+    }
     try {
       const res = await api.acceptRFQ(rfqId);
       await loadData();
@@ -520,13 +562,12 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       return;
     }
 
-    // Check ownership if user is a FARMER
-    if (
-      currentUser.role === 'FARMER' &&
-      lot.farmer_id &&
-      lot.farmer_id !== currentUser.id &&
-      lot.farmer_name !== currentUser.name
-    ) {
+    // Check strict ownership: only lot owner or official
+    const isOwner = currentUser.role === 'OFFICIAL' ||
+      lot.farmer_id === currentUser.id ||
+      lot.farmer_name === currentUser.name;
+
+    if (!isOwner) {
       alert(
         lang === 'MR'
           ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाची नोंदणी काढू शकता.'
@@ -542,7 +583,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     if (!deleteConfirmLot) return;
     setIsDeletingLot(true);
     try {
-      await api.deleteLot(deleteConfirmLot.id);
+      await api.deleteLot(deleteConfirmLot.id, currentUser || undefined);
       setLotSuccessMsg(
         lang === 'MR'
           ? `✓ शेतमाल #${deleteConfirmLot.id} (${deleteConfirmLot.commodity}) बाजारातून यशस्वीरित्या काढण्यात आला.`
@@ -553,7 +594,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
       await loadData();
     } catch (err: any) {
       console.error('Error deleting lot:', err);
-      alert(`Failed to remove lot: ${err?.message || 'Unknown error'}`);
+      alert(err?.message || 'Failed to delist produce batch.');
     } finally {
       setIsDeletingLot(false);
     }
@@ -680,12 +721,15 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
     }
   };
 
-  // Aggregated Dynamic Stats
-  const totalQuintalsListed = lots.reduce((acc, l) => acc + (Number(l.quantity_quintals) || 0), 0);
+  // Aggregated Dynamic Stats scoped to current farmer if authenticated as FARMER
+  const myLots = currentUser ? lots.filter(l => l.farmer_id === currentUser.id || l.farmer_name === currentUser.name) : [];
+  const activeScopedLots = (currentUser?.role === 'FARMER') ? myLots : lots;
+
+  const totalQuintalsListed = activeScopedLots.reduce((acc, l) => acc + (Number(l.quantity_quintals) || 0), 0);
   const totalMT = (totalQuintalsListed / 10).toFixed(1);
   const totalEscrowSecured = contracts.reduce((acc, c) => acc + (c.escrow?.advance_amount || 0), 0);
   const activeInquiriesCount = rfqs.filter(r => r.status === 'PENDING' || r.status === 'COUNTERED').length;
-  const godownUtilizationPercent = Math.min(100, Math.max(15, Math.round((totalQuintalsListed / 1500) * 100)));
+  const godownUtilizationPercent = Math.min(100, Math.max(0, Math.round((totalQuintalsListed / 1500) * 100)));
   const completedContracts = contracts.filter(c => c.status === 'COMPLETED').length;
   const escrowSettledPercent = contracts.length > 0 ? Math.round((completedContracts / contracts.length) * 100) : 100;
 
@@ -755,6 +799,25 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           >
             <Truck size={14} color="#2563eb" /> {lang === 'MR' ? 'वाहतूक व ई-गेट पास' : 'Logistics & Gate Pass'}
           </button>
+
+          {onNavigateToMarketplace && (
+            <button 
+              type="button"
+              className="btn-gov-secondary"
+              onClick={onNavigateToMarketplace}
+              style={{ 
+                backgroundColor: '#ecfdf5',
+                borderColor: '#6ee7b7',
+                color: '#065f46',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600
+              }}
+            >
+              <Store size={14} color="#059669" /> {lang === 'MR' ? 'घाऊक बाजारपेठ पहा →' : 'Marketplace (All Harvests) →'}
+            </button>
+          )}
 
           <button 
             className="btn-gov-primary"
@@ -858,9 +921,9 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
           }}
         >
           <Package size={16} />
-          <span>{lang === 'MR' ? 'वैयक्तिक शेतमाल नोंदी' : 'Individual Produce Batches'}</span>
+          <span>{lang === 'MR' ? 'माझा शेतमाल' : 'My Produce Lots'}</span>
           <span style={{ fontSize: '0.7rem', backgroundColor: activeMainTab === 'LOTS' ? '#a7f3d0' : '#e2e8f0', color: activeMainTab === 'LOTS' ? '#065f46' : '#475569', padding: '1px 7px', borderRadius: '10px' }}>
-            {lots.length}
+            {activeScopedLots.length}
           </span>
         </button>
 
@@ -918,7 +981,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
             </div>
 
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-              <strong style={{ color: '#059669' }}>● {lots.length} {t.activeHarvestLots}</strong> • APMC Certified Yards
+              <strong style={{ color: '#059669' }}>● {activeScopedLots.length} {t.activeHarvestLots}</strong> • APMC Certified Yards
             </p>
           </div>
 
@@ -1111,90 +1174,81 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.1rem', color: '#0f172a' }}>{t.activeHarvestLots}</h3>
               <span style={{ backgroundColor: '#ecfdf5', color: '#065f46', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                {lots.length} Batches Listed
+                {activeScopedLots.length} {lang === 'MR' ? 'नोंदणीकृत लॉट्स' : 'My Batches'}
               </span>
-
-              {/* Filter Pills: All Batches vs My Batches */}
-              {currentUser && (
-                <div style={{ display: 'inline-flex', gap: '3px', backgroundColor: '#f1f5f9', padding: '2px', borderRadius: 'var(--radius-full)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setLotFilterTab('ALL')}
-                    style={{
-                      padding: '3px 10px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      borderRadius: 'var(--radius-full)',
-                      border: 'none',
-                      backgroundColor: lotFilterTab === 'ALL' ? '#ffffff' : 'transparent',
-                      color: lotFilterTab === 'ALL' ? '#0f172a' : '#64748b',
-                      boxShadow: lotFilterTab === 'ALL' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.allBatches} ({lots.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLotFilterTab('MY')}
-                    style={{
-                      padding: '3px 10px',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                      borderRadius: 'var(--radius-full)',
-                      border: 'none',
-                      backgroundColor: lotFilterTab === 'MY' ? '#ffffff' : 'transparent',
-                      color: lotFilterTab === 'MY' ? '#065f46' : '#64748b',
-                      boxShadow: lotFilterTab === 'MY' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.myBatches} ({lots.filter(l => l.farmer_id === currentUser.id || l.farmer_name === currentUser.name).length})
-                  </button>
-                </div>
-              )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               <span>Total Volume: <strong style={{ color: '#0f172a' }}>{totalQuintalsListed} Quintals</strong></span>
-              <span style={{ color: '#cbd5e1' }}>•</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>Sort by:</span>
-                <span style={{ fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>Recent Activity ▾</span>
-              </div>
+              {onNavigateToMarketplace && (
+                <>
+                  <span style={{ color: '#cbd5e1' }}>•</span>
+                  <button
+                    type="button"
+                    onClick={onNavigateToMarketplace}
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: '#059669',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '0.75rem',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    <Store size={13} />
+                    <span>{lang === 'MR' ? 'सर्व शेतमाल बाजारपेठेत पहा →' : 'Explore Market Harvests (Marketplace) →'}</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Render Dynamic Lots or Clean Empty State */}
+          {/* Render Dynamic Lots or Clean Empty State - strictly scoped to farmer's produce */}
           {(() => {
-            const myLots = currentUser ? lots.filter(l => l.farmer_id === currentUser.id || l.farmer_name === currentUser.name) : [];
-            const displayedLots = (lotFilterTab === 'MY' && currentUser) ? myLots : lots;
+            const displayedLots = (currentUser?.role === 'FARMER' || currentUser?.role === 'FPO') 
+              ? myLots 
+              : (currentUser ? myLots : lots);
 
             if (displayedLots.length === 0) {
               return (
                 <div className="gov-card" style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Package size={36} style={{ margin: '0 auto 12px', color: '#94a3b8' }} />
                   <h4 style={{ fontSize: '1.05rem', color: '#0f172a', marginBottom: '6px' }}>
-                    {lotFilterTab === 'MY' 
+                    {currentUser 
                       ? (lang === 'MR' ? 'तुमचा कोणताही शेतमाल नोंदवलेला नाही' : 'No Harvest Batches Listed Under Your Account')
                       : (lang === 'MR' ? 'कोणताही शेतमाल नोंदवलेला नाही' : 'No Harvest Batches Listed Yet')}
                   </h4>
-                  <p style={{ fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 16px', lineHeight: 1.5 }}>
-                    {lotFilterTab === 'MY'
+                  <p style={{ fontSize: '0.82rem', maxWidth: '440px', margin: '0 auto 16px', lineHeight: 1.5 }}>
+                    {currentUser
                       ? (lang === 'MR'
-                          ? 'तुमचा पहिला शेतमाल नोंदवण्यासाठी वर दिलेल्या "+ नवीन शेतमाल नोंदवा" बटणावर क्लिक करा.'
-                          : 'You have not listed any batches yet under this account. Click "+ List New Harvest" above to publish your first batch.')
+                          ? 'तुमचा पहिला शेतमाल नोंदवण्यासाठी खालील "+ नवीन शेतमाल नोंदवा" बटणावर क्लिक करा, किंवा इतर शेतकऱ्यांचा माल पाहण्यासाठी बाजारपेठेत जा.'
+                          : 'You have not listed any batches yet under this account. Click "+ List New Harvest" to publish your first batch, or explore all community harvest lots in the Marketplace.')
                       : (lang === 'MR'
                           ? 'थेट संस्थात्मक खरेदीदारांकडून स्पर्धात्मक भाव आणि ५०% आगाऊ एस्क्रो हमी मिळवण्यासाठी तुमचा पहिला शेतमाल नोंदवा.'
                           : 'List your first crop batch to receive direct bilateral bids, NABL quality grading, and RBI-regulated escrow payments.')}
                   </p>
-                  <button 
-                    className="btn-gov-primary"
-                    onClick={() => setShowAddHarvestModal(true)}
-                    style={{ margin: '0 auto' }}
-                  >
-                    <Plus size={15} /> {t.listNewHarvest}
-                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <button 
+                      className="btn-gov-primary"
+                      onClick={() => setShowAddHarvestModal(true)}
+                    >
+                      <Plus size={15} /> {t.listNewHarvest}
+                    </button>
+                    {onNavigateToMarketplace && (
+                      <button 
+                        type="button"
+                        className="btn-gov-secondary"
+                        onClick={onNavigateToMarketplace}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Store size={14} color="#059669" /> {lang === 'MR' ? 'बाजारपेठ पहा' : 'Browse Marketplace'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             }
@@ -1205,7 +1259,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                 lot.farmer_id === currentUser.id ||
                 lot.farmer_name === currentUser.name
               ) : false;
-              const canInitiateDelete = isUserOwner || !currentUser || !lot.farmer_id;
+              const canInitiateDelete = isUserOwner;
 
               return (
                 <div key={lot.id} className="gov-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1226,7 +1280,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <h4 style={{ fontSize: '1.05rem', color: '#0f172a' }}>{lot.commodity} ({lot.variety})</h4>
                           <span className="badge-grade-a">{lot.quality_grade}</span>
-                          {isUserOwner && (
+                          {isUserOwner ? (
                             <span style={{ 
                               backgroundColor: '#ecfdf5', 
                               color: '#065f46', 
@@ -1237,6 +1291,18 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                               borderRadius: '4px' 
                             }}>
                               {lang === 'MR' ? 'तुमचा शेतमाल' : 'Your Batch'}
+                            </span>
+                          ) : (
+                            <span style={{ 
+                              backgroundColor: '#fef3c7', 
+                              color: '#92400e', 
+                              border: '1px solid #fde68a', 
+                              fontSize: '0.66rem', 
+                              fontWeight: 700, 
+                              padding: '1px 6px', 
+                              borderRadius: '4px' 
+                            }}>
+                              {lang === 'MR' ? `शेतकरी: ${lot.farmer_name || 'इतर'} (केवळ पहा)` : `Farmer: ${lot.farmer_name || 'Other'} (Read Only)`}
                             </span>
                           )}
                         </div>
@@ -1289,7 +1355,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                       holdDays,
                       initialQuantityQuintals: lot.quantity_quintals,
                       currentSpotPricePerQtl: lot.base_price_per_quintal,
-                      mspBenchmarkFloor: lot.base_price_per_quintal
+                      mspBenchmarkFloor: api.getMSPFloorPrice(lot.commodity)?.msp_price || lot.base_price_per_quintal
                     });
 
                     const baseScenario = forecast.scenarios.base;
@@ -1450,12 +1516,18 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                borderColor: '#bfdbfe',
-                                color: '#1d4ed8',
-                                backgroundColor: '#eff6ff',
-                                fontWeight: 600
+                                borderColor: isUserOwner ? '#bfdbfe' : '#e2e8f0',
+                                color: isUserOwner ? '#1d4ed8' : '#94a3b8',
+                                backgroundColor: isUserOwner ? '#eff6ff' : '#f8fafc',
+                                fontWeight: 600,
+                                cursor: isUserOwner ? 'pointer' : 'not-allowed',
+                                opacity: isUserOwner ? 1 : 0.6
                               }}
                               onClick={() => {
+                                if (!isUserOwner) {
+                                  alert(lang === 'MR' ? 'केवळ शेतमाल मालकच गोदामातील मालावर कर्ज घेऊ शकतात.' : 'Access restricted: Warehouse loans can only be applied by the verified produce owner.');
+                                  return;
+                                }
                                 setEnwrPrefillData({
                                   commodity: lot.commodity,
                                   quantity: lot.quantity_quintals,
@@ -1464,6 +1536,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                 });
                                 setShowENWRModal(true);
                               }}
+                              title={!isUserOwner ? 'Access restricted: Only lot owner can pledge for loan' : undefined}
                             >
                               <Percent size={12} /> {lang === 'MR' ? '७०% गोदाम कर्ज' : '70% e-NWR Loan'}
                             </button>
@@ -1477,10 +1550,16 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                backgroundColor: isColdChain ? '#0284c7' : '#059669',
-                                fontWeight: 600
+                                backgroundColor: !isUserOwner ? '#94a3b8' : (isColdChain ? '#0284c7' : '#059669'),
+                                fontWeight: 600,
+                                cursor: isUserOwner ? 'pointer' : 'not-allowed',
+                                opacity: isUserOwner ? 1 : 0.6
                               }}
                               onClick={() => {
+                                if (!isUserOwner) {
+                                  alert(lang === 'MR' ? 'केवळ शेतमाल मालकच गोदाम किंवा शीतगृह जागा आरक्षित करू शकतात.' : 'Access restricted: Storage space can only be booked by the verified produce owner.');
+                                  return;
+                                }
                                 const matchedFacility = storageFacilities.find(sf => {
                                   if (isColdChain && sf.facility_type !== 'COLD_STORAGE') return false;
                                   return sf.district.toLowerCase() === lot.district.toLowerCase();
@@ -1491,6 +1570,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                 setStorageModalQty(lot.quantity_quintals);
                                 setShowStorageModal(true);
                               }}
+                              title={!isUserOwner ? 'Access restricted: Only lot owner can book storage' : undefined}
                             >
                               {isColdChain ? <Snowflake size={12} /> : <Warehouse size={12} />}
                               {isColdChain 
@@ -1539,8 +1619,23 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                           <button
                             type="button"
                             className="btn-gov-secondary"
-                            onClick={() => onNavigateToRFQs(lot)}
-                            style={{ fontSize: '0.72rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => {
+                              if (!isUserOwner && currentUser?.role === 'FARMER') {
+                                alert(lang === 'MR' ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाच्या खरेदीदारांशी वाटाघाटी करू शकता.' : 'Access restricted: You can only negotiate contracts for your own produce batches.');
+                                return;
+                              }
+                              onNavigateToRFQs(lot);
+                            }}
+                            style={{ 
+                              fontSize: '0.72rem', 
+                              padding: '4px 10px', 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              cursor: (isUserOwner || currentUser?.role !== 'FARMER') ? 'pointer' : 'not-allowed',
+                              opacity: (isUserOwner || currentUser?.role !== 'FARMER') ? 1 : 0.6
+                            }}
+                            title={!isUserOwner && currentUser?.role === 'FARMER' ? 'Access restricted: Only lot owner can open RFQs' : undefined}
                           >
                             {lang === 'MR' ? 'खरेदीदारांशी वाटाघाटी करा' : 'Open RFQ Desk'} <ArrowRight size={12} />
                           </button>
@@ -1722,13 +1817,22 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                                   style={{ 
                                     padding: '7px 14px', 
                                     fontSize: '0.76rem', 
-                                    backgroundColor: '#059669',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    whiteSpace: 'nowrap'
+                                    backgroundColor: isUserOwner ? '#059669' : '#94a3b8',
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '6px', 
+                                    whiteSpace: 'nowrap',
+                                    cursor: isUserOwner ? 'pointer' : 'not-allowed',
+                                    opacity: isUserOwner ? 1 : 0.6
                                   }}
-                                  onClick={() => handleOpenPitchModal(lot, match)}
+                                  onClick={() => {
+                                    if (!isUserOwner) {
+                                      alert(lang === 'MR' ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाचा प्रस्ताव खरेदीदारांना पाठवू शकता.' : 'Access restricted: You can only pitch batches registered under your account.');
+                                      return;
+                                    }
+                                    handleOpenPitchModal(lot, match);
+                                  }}
+                                  title={!isUserOwner ? 'Access restricted: Only lot owner can pitch to buyers' : undefined}
                                 >
                                   <Send size={13} /> {t.pitchLotBtn}
                                 </button>
@@ -1749,18 +1853,36 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <button 
                         className="btn-gov-secondary" 
-                        style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', borderColor: '#bfdbfe', color: '#1d4ed8', backgroundColor: '#eff6ff' }}
-                        onClick={() => handleOpenLogisticsForLot(lot)}
+                        style={{ 
+                          padding: '6px 10px', 
+                          fontSize: '0.75rem', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          borderColor: isUserOwner ? '#bfdbfe' : '#e2e8f0', 
+                          color: isUserOwner ? '#1d4ed8' : '#94a3b8', 
+                          backgroundColor: isUserOwner ? '#eff6ff' : '#f8fafc',
+                          cursor: isUserOwner ? 'pointer' : 'not-allowed',
+                          opacity: isUserOwner ? 1 : 0.6
+                        }}
+                        onClick={() => {
+                          if (!isUserOwner) {
+                            alert(lang === 'MR' ? 'वाहतूक व ई-गेट पास केवळ शेतमाल मालकाद्वारे तयार केला जाऊ शकतो.' : 'Access restricted: Logistics & e-Gate Passes can only be generated for your own harvest batches.');
+                            return;
+                          }
+                          handleOpenLogisticsForLot(lot);
+                        }}
+                        title={!isUserOwner ? 'Access restricted: Only lot owner can arrange logistics' : undefined}
                       >
                         <Truck size={13} /> {lang === 'MR' ? 'वाहतूक व ई-गेट पास' : 'Logistics & Gate Pass'}
                       </button>
                       {/* Remove / Delist Lot Action */}
-                      {canInitiateDelete && (
+                      {canInitiateDelete && isUserOwner && (
                         <button 
                           className="btn-gov-secondary" 
                           style={{ 
                             padding: '6px 10px', 
-                            fontSize: '0.75rem',
+                            fontSize: '0.75rem', 
                             color: lot.status === 'UNDER_CONTRACT' ? '#94a3b8' : '#dc2626',
                             borderColor: lot.status === 'UNDER_CONTRACT' ? '#e2e8f0' : '#fecaca',
                             backgroundColor: lot.status === 'UNDER_CONTRACT' ? '#f8fafc' : '#fff5f5',
@@ -1801,8 +1923,18 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                       </button>
                       <button 
                         className="btn-gov-primary" 
-                        style={{ padding: '6px 14px', fontSize: '0.75rem' }}
+                        style={{ 
+                          padding: '6px 14px', 
+                          fontSize: '0.75rem',
+                          backgroundColor: (isUserOwner || currentUser?.role !== 'FARMER') ? '#059669' : '#64748b',
+                          cursor: (isUserOwner || currentUser?.role !== 'FARMER') ? 'pointer' : 'not-allowed',
+                          opacity: (isUserOwner || currentUser?.role !== 'FARMER') ? 1 : 0.6
+                        }}
                         onClick={() => {
+                          if (!isUserOwner && currentUser?.role === 'FARMER') {
+                            alert(lang === 'MR' ? 'तुम्ही केवळ तुमच्या स्वतःच्या शेतमालाच्या खरेदीदारांशी वाटाघाटी करू शकता.' : 'Access restricted: You can only negotiate contracts for your own produce batches.');
+                            return;
+                          }
                           const navOffers = () => onNavigateToRFQs(lot);
                           if (onRequireAuth && !currentUser) {
                             onRequireAuth(
@@ -1815,6 +1947,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                             navOffers();
                           }
                         }}
+                        title={!isUserOwner && currentUser?.role === 'FARMER' ? 'Access restricted: Only lot owner can negotiate' : undefined}
                       >
                         {t.viewOffers} <ArrowRight size={13} />
                       </button>
@@ -2181,7 +2314,7 @@ export const FarmerPortal: React.FC<FarmerPortalProps> = ({
                               gap: '4px'
                             }}
                           >
-                            <strong>{m.farmer_name}</strong>: {m.quantity_quintals} Qtl ({m.payout_share_percent}%)
+                            <strong>{m.farmer_name}</strong>: {m.quantity_quintals} Qtl ({m.payout_share_percent ? `${m.payout_share_percent}%` : `${((m.quantity_quintals / (pool.collected_volume_quintals || 1)) * 100).toFixed(1)}%`})
                           </span>
                         ))}
                         {pool.members.length > 4 && (

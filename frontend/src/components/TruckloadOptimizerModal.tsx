@@ -11,7 +11,8 @@ import {
   X, 
   Users, 
   Scale, 
-  FileText
+  FileText,
+  AlertTriangle
 } from 'lucide-react';
 import type { ConsignmentPool, VehicleOption, PooledLotItem } from '../types';
 import { 
@@ -398,7 +399,7 @@ export const TruckloadOptimizerModal: React.FC<TruckloadOptimizerModalProps> = (
                     <span style={{
                       fontWeight: 900,
                       fontSize: '0.92rem',
-                      color: freightCalc.utilizationPct >= 85 ? '#059669' : freightCalc.utilizationPct >= 60 ? '#d97706' : '#dc2626'
+                      color: freightCalc.isOverloaded ? '#dc2626' : (freightCalc.utilizationPct >= 85 ? '#059669' : freightCalc.utilizationPct >= 60 ? '#d97706' : '#dc2626')
                     }}>
                       {freightCalc.totalLoadedQuintals} / {selectedVehicle.capacity_quintals} Qtl ({freightCalc.utilizationPct}% {isMr ? 'भरले' : 'Filled'})
                     </span>
@@ -416,8 +417,8 @@ export const TruckloadOptimizerModal: React.FC<TruckloadOptimizerModalProps> = (
                   border: '1px solid #cbd5e1'
                 }}>
                   <div style={{
-                    width: `${freightCalc.utilizationPct}%`,
-                    backgroundColor: freightCalc.utilizationPct >= 85 ? '#10b981' : freightCalc.utilizationPct >= 60 ? '#3b82f6' : '#f59e0b',
+                    width: `${Math.min(100, freightCalc.utilizationPct)}%`,
+                    backgroundColor: freightCalc.isOverloaded ? '#ef4444' : (freightCalc.utilizationPct >= 85 ? '#10b981' : freightCalc.utilizationPct >= 60 ? '#3b82f6' : '#f59e0b'),
                     transition: 'width 0.4s ease',
                     display: 'flex',
                     alignItems: 'center',
@@ -430,6 +431,29 @@ export const TruckloadOptimizerModal: React.FC<TruckloadOptimizerModalProps> = (
                     {freightCalc.utilizationPct > 15 ? `${freightCalc.utilizationPct}%` : ''}
                   </div>
                 </div>
+
+                {freightCalc.isOverloaded && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #f87171',
+                    borderRadius: '8px',
+                    color: '#991b1b',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <AlertTriangle size={16} />
+                    <span>
+                      {isMr 
+                        ? `वाहन ओव्हरलोड चेतावणी: एकूण वजन क्षमतेपेक्षा ${(freightCalc.totalLoadedQuintals - selectedVehicle.capacity_quintals).toFixed(1)} क्विंटल जास्त आहे. मोटार वाहन कायद्यानुसार कृपया मोठा ट्रक निवडा.`
+                        : `Vehicle Overload Alert: Total load exceeds legal capacity by ${(freightCalc.totalLoadedQuintals - selectedVehicle.capacity_quintals).toFixed(1)} Qtl. Please upgrade commercial vehicle size.`}
+                    </span>
+                  </div>
+                )}
 
                 {/* Vehicle Selection Carousel */}
                 <div style={{

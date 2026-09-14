@@ -27,6 +27,15 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
   // Selected gate pass for active weighbridge processing
   const [selectedPass, setSelectedPass] = useState<DigitalGatePass>(INITIAL_GATE_PASSES[1]); // Default to gp-war-3021 (in progress)
 
+  // Weighbridge live state inputs
+  const [grossWeightKg, setGrossWeightKg] = useState<number>(selectedPass.gross_weight_kg || 17200);
+  const [tareWeightKg, setTareWeightKg] = useState<number>(selectedPass.tare_weight_kg || 9700);
+  const [moisturePct, setMoisturePct] = useState<number>(selectedPass.tested_moisture_pct || 8.5);
+  const [foreignMatterPct, setForeignMatterPct] = useState<number>(selectedPass.tested_foreign_matter_pct || 1.2);
+  const [damagedPct, setDamagedPct] = useState<number>(selectedPass.tested_damaged_pct || 1.0);
+  const [isProcessingSettlement, setIsProcessingSettlement] = useState(false);
+  const [isSettlementComplete, setIsSettlementComplete] = useState(selectedPass.status === 'PAYMENT_TRIGGERED');
+
   useEffect(() => {
     let isMounted = true;
     api.getDigitalGatePasses().then((data) => {
@@ -44,16 +53,6 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
     });
     return () => { isMounted = false; };
   }, []);
-  
-  // Weighbridge live state inputs
-  const [grossWeightKg, setGrossWeightKg] = useState<number>(selectedPass.gross_weight_kg || 17200);
-  const [tareWeightKg, setTareWeightKg] = useState<number>(selectedPass.tare_weight_kg || 9700);
-  const [moisturePct, setMoisturePct] = useState<number>(selectedPass.tested_moisture_pct || 8.5);
-  const [foreignMatterPct, setForeignMatterPct] = useState<number>(selectedPass.tested_foreign_matter_pct || 1.2);
-  const [damagedPct, setDamagedPct] = useState<number>(selectedPass.tested_damaged_pct || 1.0);
-  
-  const [isProcessingSettlement, setIsProcessingSettlement] = useState(false);
-  const [isSettlementComplete, setIsSettlementComplete] = useState(selectedPass.status === 'PAYMENT_TRIGGERED');
 
   // Compute live weighbridge settlement
   const settlement = computeWeighbridgeSettlement(
@@ -78,6 +77,10 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
   };
 
   const handleTriggerEscrowPayout = () => {
+    if (grossWeightKg <= tareWeightKg) {
+      alert(isMr ? 'वजनकाटा त्रुटी: एकूण वजन (Gross) रिकाम्या वाहनाच्या (Tare) वजनापेक्षा जास्त असणे आवश्यक आहे.' : 'Weighbridge Error: Gross weight must be greater than tare weight.');
+      return;
+    }
     setIsProcessingSettlement(true);
     setTimeout(() => {
       setIsProcessingSettlement(false);
@@ -416,7 +419,7 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
             ) : (
               <button
                 type="button"
-                disabled={isProcessingSettlement}
+                disabled={isProcessingSettlement || grossWeightKg <= tareWeightKg}
                 onClick={handleTriggerEscrowPayout}
                 style={{
                   backgroundColor: '#059669',
@@ -426,7 +429,8 @@ export const WeighbridgeVerificationTerminal: React.FC<WeighbridgeVerificationTe
                   padding: '12px',
                   fontSize: '0.86rem',
                   fontWeight: 900,
-                  cursor: isProcessingSettlement ? 'not-allowed' : 'pointer',
+                  cursor: (isProcessingSettlement || grossWeightKg <= tareWeightKg) ? 'not-allowed' : 'pointer',
+                  opacity: (isProcessingSettlement || grossWeightKg <= tareWeightKg) ? 0.6 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

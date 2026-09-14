@@ -40,7 +40,7 @@ export const App: React.FC = () => {
 
   const handleListLotFromMandi = (data: { commodity: string; variety?: string; price: number; mandi?: string }) => {
     setPrefillLotData(data);
-    setActiveTab('farmer');
+    handleSelectTab('farmer');
   };
 
   // Authentication State
@@ -49,7 +49,7 @@ export const App: React.FC = () => {
   const [pendingActionCallback, setPendingActionCallback] = useState<(() => void) | null>(null);
   const [pendingTabAfterAuth, setPendingTabAfterAuth] = useState<string | null>(null);
 
-  const PROTECTED_TABS = ['buyer', 'rfq', 'contracts', 'disputes'];
+  const PROTECTED_TABS = ['farmer', 'buyer', 'rfq', 'contracts', 'disputes'];
 
   useEffect(() => {
     loadUsers();
@@ -372,17 +372,18 @@ export const App: React.FC = () => {
                 lang={lang}
               />
             )}
-            {activeTab === 'farmer' && (rolePerms.primaryTabs.includes('farmer') || !currentUser) && (
+            {activeTab === 'farmer' && rolePerms.primaryTabs.includes('farmer') && (
               <FarmerPortal 
                 currentUser={currentUser} 
                 onNavigateToRFQs={(lot) => handleNavigateToNegotiation(lot)} 
                 onNavigateToDemands={() => handleSelectTab('demands')}
+                onNavigateToMarketplace={() => handleSelectTab('buyer')}
                 lang={lang}
                 onRequireAuth={handleRequireAuth}
                 initialLotPrefill={prefillLotData}
               />
             )}
-            {activeTab === 'buyer' && (rolePerms.primaryTabs.includes('buyer') || !currentUser) && (
+            {activeTab === 'buyer' && rolePerms.primaryTabs.includes('buyer') && (
               <BuyerDiscovery 
                 currentUser={currentUser} 
                 onNavigateToContracts={handleNavigateToContracts} 
@@ -441,7 +442,7 @@ export const App: React.FC = () => {
           if (prefill && tab === 'farmer') {
             setPrefillLotData(prefill);
           }
-          setActiveTab(tab);
+          handleSelectTab(tab);
         }}
       />
 
@@ -450,13 +451,14 @@ export const App: React.FC = () => {
         isOpen={isQualityModalOpen}
         onClose={() => setIsQualityModalOpen(false)}
         onApplyGrade={(result) => {
+          const baseRate = api.getMSPFloorPrice(result.commodity)?.msp_price || 4890;
           setPrefillLotData({
             commodity: result.commodity,
             variety: result.sample_name || `${result.commodity} FAQ`,
-            price: result.suggested_price_multiplier ? Math.round(5120 * result.suggested_price_multiplier) : 5120,
+            price: result.suggested_price_multiplier ? Math.round(baseRate * result.suggested_price_multiplier) : baseRate,
             mandi: 'Terminal APMC Yard'
           });
-          setActiveTab('farmer');
+          handleSelectTab('farmer');
         }}
         initialCommodity="Soybean"
         contextMode="LISTING"

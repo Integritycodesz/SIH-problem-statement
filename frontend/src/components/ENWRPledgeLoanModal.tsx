@@ -27,8 +27,6 @@ export const ENWRPledgeLoanModal: React.FC<ENWRPledgeLoanModalProps> = ({
   initialPrice = 4900,
   initialWarehouseName = 'Maharashtra State Warehousing Corp (MSWC) Nodal Depot'
 }) => {
-  if (!isOpen) return null;
-
   const isMarathi = lang === 'MR';
 
   const [commodity, setCommodity] = useState<string>(initialCommodity);
@@ -62,7 +60,7 @@ export const ENWRPledgeLoanModal: React.FC<ENWRPledgeLoanModalProps> = ({
   const interestRate = 7.0; // 7% p.a. concessional rate under Maharashtra subvention
   const interestCost = Math.round((sanctionAmt * (interestRate / 100) * tenureDays) / 365);
   const warehouseStorageCost = Math.round(qty * 0.40 * tenureDays); // ₹0.40 / qtl / day
-  const projectedFutureRate = Math.round(rate * 1.078); // Expected +7.8% gain over 45 days
+  const projectedFutureRate = Math.round(rate * (1 + 0.078 * (tenureDays / 45))); // Expected gain scaled by tenure (benchmark: +7.8% per 45 days)
   const futureGrossVal = qty * projectedFutureRate;
   const grossHoldingGain = futureGrossVal - grossVal;
   const netFarmerAdvantage = grossHoldingGain - interestCost - warehouseStorageCost;
@@ -98,6 +96,8 @@ export const ENWRPledgeLoanModal: React.FC<ENWRPledgeLoanModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div 

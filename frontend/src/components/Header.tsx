@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Bell, ChevronDown, Check, ShieldCheck, 
   User as UserIcon, Zap, CheckCheck, Lock, LogOut, Building2,
-  Mic, Sparkles
+  Mic, Sparkles, Store
 } from 'lucide-react';
 import { api, type User, type AgriNotification } from '../services/api';
 import { isSupabaseConfigured, subscribeToCommodityPrices } from '../services/supabase';
@@ -345,7 +345,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{t.farmerProduceTab}</span>
               {(currentUser?.role === 'FARMER' || currentUser?.role === 'FPO') && (
                 <span style={{ fontSize: '0.62rem', backgroundColor: '#059669', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  {lang === 'MR' ? 'माझे' : 'My'}
+                  {lang === 'MR' ? 'लॉट्स' : 'Lots'}
                 </span>
               )}
             </button>
@@ -375,7 +375,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Marketplace — BUYER, ADMIN, OFFICIAL + Guests with lock */}
+          {/* Marketplace — BUYER, FARMER, FPO, ADMIN, OFFICIAL + Guests with lock */}
           {(rolePerms.primaryTabs.includes('buyer') || !currentUser) && (
             <button
               onClick={() => onSelectTab('buyer')}
@@ -392,10 +392,16 @@ export const Header: React.FC<HeaderProps> = ({
               }}
             >
               {!currentUser && <Lock size={12} style={{ opacity: 0.6 }} />}
+              <Store size={13} color={activeTab === 'buyer' ? '#34d399' : '#059669'} />
               <span>{t.marketplaceTab}</span>
               {currentUser?.role === 'BUYER' && (
                 <span style={{ fontSize: '0.62rem', backgroundColor: '#2563eb', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
                   {lang === 'MR' ? 'खरेदी' : 'Buyer'}
+                </span>
+              )}
+              {(currentUser?.role === 'FARMER' || currentUser?.role === 'FPO') && (
+                <span style={{ fontSize: '0.62rem', backgroundColor: '#0284c7', color: '#ffffff', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  {lang === 'MR' ? 'सर्व शेतमाल' : 'All Crops'}
                 </span>
               )}
             </button>

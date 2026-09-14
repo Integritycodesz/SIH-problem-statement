@@ -61,15 +61,34 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
 
   const loadPortalData = async () => {
     try {
+      const isFarmer = currentUser?.role === 'FARMER';
+      const isBuyer = currentUser?.role === 'BUYER';
+
       const [fetchedLots, fetchedRfqs] = await Promise.all([
         api.getLots(),
-        api.getRFQs()
+        api.getRFQs(undefined, currentUser?.id)
       ]);
-      setAllLots(fetchedLots);
-      setRfqs(fetchedRfqs);
 
-      // If no lots in DB, clear any stale prop lot
-      if (fetchedLots.length === 0) {
+      let relevantLots = isFarmer && currentUser
+        ? fetchedLots.filter(l => l.farmer_id === currentUser.id || l.farmer_name === currentUser.name)
+        : fetchedLots;
+
+      // Preserve propLot (including virtual FPO collective pool batches with ID >= 9000)
+      if (propLot && !relevantLots.find(l => l.id === propLot.id)) {
+        relevantLots = [propLot, ...relevantLots];
+      }
+
+      const relevantRfqs = isFarmer && currentUser
+        ? fetchedRfqs.filter(r => r.farmer_id === currentUser.id || r.farmer_name === currentUser.name)
+        : (isBuyer && currentUser
+            ? fetchedRfqs.filter(r => r.buyer_id === currentUser.id || r.buyer_name === currentUser.name)
+            : fetchedRfqs);
+
+      setAllLots(relevantLots);
+      setRfqs(relevantRfqs);
+
+      // If no relevant lots in DB, clear any stale prop lot
+      if (relevantLots.length === 0) {
         setCurrentLot(null);
         setActiveRfq(null);
         return;
@@ -77,23 +96,23 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
 
       // Determine target lot
       let targetLot = propLot;
-      // Validate propLot still exists in DB
-      if (targetLot && !fetchedLots.find(l => l.id === targetLot!.id)) {
+      // Validate propLot still exists in relevantLots
+      if (targetLot && !relevantLots.find(l => l.id === targetLot!.id)) {
         targetLot = null;
       }
       if (!targetLot && initialRfqId) {
-        const matchingRfq = fetchedRfqs.find(r => r.id === initialRfqId);
+        const matchingRfq = relevantRfqs.find(r => r.id === initialRfqId);
         if (matchingRfq) {
-          targetLot = fetchedLots.find(l => l.id === matchingRfq.lot_id) || null;
+          targetLot = relevantLots.find(l => l.id === matchingRfq.lot_id) || null;
         }
       }
-      if (!targetLot && fetchedLots.length > 0) {
-        targetLot = fetchedLots[0];
+      if (!targetLot && relevantLots.length > 0) {
+        targetLot = relevantLots[0];
       }
 
       if (targetLot) {
         setCurrentLot(targetLot);
-        bindRfqSession(targetLot, fetchedRfqs);
+        bindRfqSession(targetLot, relevantRfqs);
       } else {
         setCurrentLot(null);
         setActiveRfq(null);
@@ -115,6 +134,10 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
   };
 
   const handleSelectDifferentLot = (lot: ProduceLot) => {
+    if (currentUser?.role === 'FARMER' && lot.farmer_id !== currentUser.id && lot.farmer_name !== currentUser.name) {
+      alert('Access restricted: You can only negotiate contracts for your own produce batches.');
+      return;
+    }
     setCurrentLot(lot);
     bindRfqSession(lot, rfqs);
     setFeedbackBanner(null);
@@ -122,6 +145,14 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
 
   const handleCounterSubmit = async () => {
     if (!currentLot) return;
+    if (currentUser?.role === 'FARMER' && currentLot.farmer_id !== currentUser.id && currentLot.farmer_name !== currentUser.name) {
+      alert('Access restricted: You cannot submit counter-offers on another farmer\'s produce lot.');
+      return;
+    }
+    if (!activeRfq && (currentUser?.role === 'FARMER' || currentUser?.role === 'FPO')) {
+      alert('As a producer/seller, you can submit counter-offers after an institutional buyer initiates a procurement bid.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       if (!activeRfq) {
@@ -167,9 +198,21 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
     }
   };
 
-
   const handleAcceptTermsAndSign = async () => {
     if (!activeRfq) return;
+    if (currentUser?.role === 'FARMER' && activeRfq.farmer_id !== currentUser.id && activeRfq.farmer_name !== currentUser.name) {
+      alert('Access restricted: You cannot accept contract terms on another farmer\'s RFQ.');
+      return;
+    }
+    if (currentUser?.role === 'BUYER' && activeRfq.buyer_id !== currentUser.id && activeRfq.buyer_name !== currentUser.name) {
+      alert('Access restricted: You cannot accept contract terms on another buyer\'s RFQ.');
+      return;
+    }
+    const lastMessage = activeRfq.messages && activeRfq.messages.length > 0 ? activeRfq.messages[activeRfq.messages.length - 1] : null;
+    if (lastMessage && lastMessage.sender_role === currentUser?.role) {
+      alert('Bilateral Rule: You cannot accept your own counter-offer. Please wait for the counterparty to accept or submit a counter.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await api.acceptRFQ(activeRfq.id);
@@ -206,12 +249,18 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
         <div className="gov-card" style={{ padding: '60px 30px', textAlign: 'center' }}>
           <ShieldCheck size={48} style={{ margin: '0 auto 16px', color: '#94a3b8' }} />
           <h3 style={{ fontSize: '1.3rem', color: '#0f172a', marginBottom: '8px' }}>
-            {lang === 'MR' ? 'कोणताही शेतमाल उपलब्ध नाही' : 'No Harvest Lots Available for Negotiation'}
+            {currentUser?.role === 'FARMER'
+              ? (lang === 'MR' ? 'तुमचा कोणताही शेतमाल वाटाघाटीसाठी उपलब्ध नाही' : 'No Harvest Lots Under Negotiation For Your Account')
+              : (lang === 'MR' ? 'कोणताही शेतमाल उपलब्ध नाही' : 'No Harvest Lots Available for Negotiation')}
           </h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto 20px', lineHeight: 1.5 }}>
-            {lang === 'MR'
-              ? 'सध्या कोणत्याही शेतकऱ्याने शेतमाल सूचीबद्ध केलेला नाही. कृपया शेतकरी पोर्टलवरून शेतमाल नोंदणी करा किंवा नंतर पुन्हा तपासा.'
-              : 'No farmer produce lots are currently listed in the marketplace. Farmers can list their harvest from the Farmer Portal, or check back after new mandi arrivals.'}
+            {currentUser?.role === 'FARMER'
+              ? (lang === 'MR'
+                  ? 'तुमच्या खात्याखाली कोणताही शेतमाल नोंदवलेला नाही. खरेदीदारांकडून थेट बोली मिळवण्यासाठी कृपया शेतकरी पोर्टलवरून शेतमाल नोंदवा.'
+                  : 'You do not have any harvest batches listed under your account. List produce in the Farmer Portal to receive institutional buyer bids.')
+              : (lang === 'MR'
+                  ? 'सध्या कोणत्याही शेतकऱ्याने शेतमाल सूचीबद्ध केलेला नाही. कृपया शेतकरी पोर्टलवरून शेतमाल नोंदणी करा किंवा नंतर पुन्हा तपासा.'
+                  : 'No farmer produce lots are currently listed in the marketplace. Farmers can list their harvest from the Farmer Portal, or check back after new mandi arrivals.')}
           </p>
           <button className="btn-gov-primary" onClick={onBackToMarketplace} style={{ margin: '0 auto' }}>
             {lang === 'MR' ? 'बाजारपेठेवर परत जा' : 'Back to Marketplace'}
@@ -730,21 +779,30 @@ export const RFQNegotiationPortal: React.FC<RFQNegotiationPortalProps> = ({
             <button 
               className="btn-gov-secondary"
               style={{ flex: 1, justifyContent: 'center', padding: '12px', fontSize: '0.88rem' }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || (!activeRfq && (currentUser?.role === 'FARMER' || currentUser?.role === 'FPO'))}
               onClick={handleCounterSubmit}
+              title={(!activeRfq && (currentUser?.role === 'FARMER' || currentUser?.role === 'FPO')) ? 'Awaiting buyer offer' : undefined}
             >
               {isSubmitting ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
-              {t.submitCounterOffer}
+              {(!activeRfq && (currentUser?.role === 'FARMER' || currentUser?.role === 'FPO')) ? 'Awaiting Buyer Offer' : t.submitCounterOffer}
             </button>
 
-            <button 
-              className="btn-gov-primary"
-              style={{ flex: 1, justifyContent: 'center', padding: '12px', fontSize: '0.88rem' }}
-              disabled={isSubmitting}
-              onClick={handleAcceptTermsAndSign}
-            >
-              <CheckCircle2 size={15} /> {t.acceptTermsSign}
-            </button>
+            {(() => {
+              const lastMessage = activeRfq?.messages && activeRfq.messages.length > 0 ? activeRfq.messages[activeRfq.messages.length - 1] : null;
+              const isMyOffer = lastMessage ? (lastMessage.sender_role === currentUser?.role) : false;
+              const canAccept = !!activeRfq && !isMyOffer;
+              return (
+                <button 
+                  className="btn-gov-primary" 
+                  style={{ flex: 1, justifyContent: 'center', padding: '12px', fontSize: '0.88rem', opacity: (!canAccept || isSubmitting) ? 0.6 : 1 }}
+                  disabled={isSubmitting || !canAccept}
+                  onClick={handleAcceptTermsAndSign}
+                  title={!activeRfq ? 'No active RFQ session' : isMyOffer ? 'Awaiting counterparty acceptance' : 'Accept terms and sign contract'}
+                >
+                  <CheckCircle2 size={15} /> {t.acceptTermsSign}
+                </button>
+              );
+            })()}
           </div>
         </div>
       </div>

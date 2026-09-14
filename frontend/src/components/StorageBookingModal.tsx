@@ -64,7 +64,8 @@ export const StorageBookingModal: React.FC<StorageBookingModalProps> = ({
   const totalRent = Math.round(dailyRent * days);
   const handlingFee = Math.round(qty * 15);
   const totalAmount = totalRent + handlingFee;
-  const approxEnwrAdvance = Math.round(qty * 2450 * 0.70); // 70% of spot base value
+  const commoditySpotRate = api.getMSPFloorPrice(commodity)?.msp_price || 2450;
+  const approxEnwrAdvance = Math.round(qty * commoditySpotRate * 0.70); // 70% of spot/MSP base value
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

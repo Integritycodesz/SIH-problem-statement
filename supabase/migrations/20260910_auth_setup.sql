@@ -3,6 +3,7 @@
 
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.users ALTER COLUMN phone DROP NOT NULL;
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_phone_key;
 
 -- Enable RLS on users with complete select/insert/update policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -53,9 +54,15 @@ BEGIN
   )
   ON CONFLICT (email) DO UPDATE
   SET auth_user_id = EXCLUDED.auth_user_id,
+      phone = COALESCE(EXCLUDED.phone, public.users.phone),
       name = COALESCE(EXCLUDED.name, public.users.name),
-      role = COALESCE(EXCLUDED.role, public.users.role);
+      role = COALESCE(EXCLUDED.role, public.users.role),
+      district = COALESCE(EXCLUDED.district, public.users.district);
   RETURN new;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE WARNING 'handle_new_user exception ignored: %', SQLERRM;
+    RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
