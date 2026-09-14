@@ -310,11 +310,15 @@ class ProduceComputerVisionService:
             }
 
         # -------------------------------------------------------------
-        # STEP 3: COMMODITY CHROMATIC SEGMENTATION
+        # STEP 3: COMMODITY CHROMATIC SEGMENTATION & AUTO-CORRECTION
         # -------------------------------------------------------------
         clean_comm = commodity_name.strip().lower()
-        if clean_comm in ("auto", "auto-detect", ""):
-            baseline_key = cls.auto_detect_commodity(R, G, B, Y, saturation)
+        auto_detected_key = cls.auto_detect_commodity(R, G, B, Y, saturation)
+        auto_corrected = False
+        original_requested_comm = commodity_name
+
+        if clean_comm in ("auto", "auto-detect", "", "all"):
+            baseline_key = auto_detected_key
             commodity_name = cls.COMMODITY_BASELINES[baseline_key]["name"]
         else:
             baseline_key = "onion"
@@ -322,6 +326,42 @@ class ProduceComputerVisionService:
                 if k in clean_comm:
                     baseline_key = k
                     break
+            
+            # Cross-verify: If visual signature overwhelmingly contradicts the selected dropdown
+            # (e.g. user selected Soybean/Wheat grains, but the photo is unmistakable Tomato or Cotton)
+            if auto_detected_key != baseline_key:
+                # Strong Tomato lycopene signature
+                fg_mask_test = (Y > 25) & (Y < 235) & (saturation > 0.08)
+                if np.sum(fg_mask_test) > 200:
+                    fg_R_test = float(np.mean(R[fg_mask_test]))
+                    fg_G_test = float(np.mean(G[fg_mask_test]))
+                    fg_B_test = float(np.mean(B[fg_mask_test]))
+                    fg_sat_test = float(np.mean(saturation[fg_mask_test]))
+
+                    is_strong_tomato = (
+                        auto_detected_key == "tomato" and
+                        fg_R_test > fg_G_test * 1.25 and
+                        fg_R_test > fg_B_test * 1.35 and
+                        fg_sat_test > 0.22 and
+                        baseline_key in ["soybean", "wheat", "cotton", "maize", "gram", "tur", "potato"]
+                    )
+                    is_strong_cotton = (
+                        auto_detected_key == "cotton" and
+                        float(np.mean(Y[fg_mask_test])) > 170.0 and
+                        fg_sat_test < 0.12 and
+                        baseline_key in ["tomato", "onion", "soybean"]
+                    )
+                    is_strong_onion = (
+                        auto_detected_key == "onion" and
+                        fg_R_test > fg_G_test and
+                        fg_sat_test > 0.22 and
+                        baseline_key in ["soybean", "wheat", "cotton"]
+                    )
+
+                    if is_strong_tomato or is_strong_cotton or is_strong_onion:
+                        baseline_key = auto_detected_key
+                        commodity_name = cls.COMMODITY_BASELINES[baseline_key]["name"]
+                        auto_corrected = True
         
         baseline = cls.COMMODITY_BASELINES[baseline_key]
 
@@ -331,14 +371,18 @@ class ProduceComputerVisionService:
             red_purple_mask = (R > G + 12) & (R > B + 4) & (saturation > 0.14) & (Y > 25.0) & (Y < 235.0)
             copper_brown_mask = (R > B + 18) & (G > B + 8) & (saturation > 0.16) & (Y > 30.0) & (Y < 230.0)
             white_onion_mask = (Y > 120.0) & (Y < 235.0) & (saturation < 0.22) & (abs(R - G) < 22) & (abs(G - B) < 22)
-            foreground_mask = red_purple_mask | copper_brown_mask | white_onion_mask
+            onion_dark_rot = (Y > 15.0) & (Y < 75.0) & (R > B) & (saturation > 0.08)
+            foreground_mask = red_purple_mask | copper_brown_mask | white_onion_mask | onion_dark_rot
         elif baseline_key == "tomato":
-            # Tomato: Lycopene red/orange or turning yellow
-            foreground_mask = (R > G * 1.15) & (R > B * 1.25) & (saturation > 0.20) & (Y > 25.0) & (Y < 240.0)
+            # Tomato: Lycopene red/orange, turning yellow, OR dark rot lesions / wrinkles on tomato body
+            is_red = (R > G * 1.08) & (R > B * 1.12) & (saturation > 0.15) & (Y > 20.0) & (Y < 245.0)
+            is_dark_rot = (Y > 15.0) & (Y < 95.0) & (R >= B) & (R > 25.0) & (R < 160.0) & (saturation > 0.08)
+            foreground_mask = is_red | is_dark_rot
         elif baseline_key in ["soybean", "wheat", "maize", "gram", "tur"]:
             # Legumes & Grains: Golden yellow, amber, pale straw
             grain_gold_mask = (R > 85.0) & (G > 65.0) & (B < R * 0.88) & (saturation > 0.12) & (Y > 35.0) & (Y < 240.0)
-            foreground_mask = grain_gold_mask
+            grain_dark_mold = (Y > 20.0) & (Y < 75.0) & (R > 35.0) & (saturation > 0.06)
+            foreground_mask = grain_gold_mask | grain_dark_mold
         elif baseline_key == "cotton":
             # Cotton: High-luminance white fiber with pod calyx
             cotton_fiber_mask = (Y > 165.0) & (saturation < 0.15)
@@ -346,23 +390,26 @@ class ProduceComputerVisionService:
             foreground_mask = cotton_fiber_mask | (calyx_mask & (Y > 30.0))
         elif baseline_key == "potato":
             # Potato: Earthy tan / golden brown skin
-            foreground_mask = (R > 80.0) & (G > 60.0) & (B < R * 0.88) & (saturation > 0.12) & (Y > 30.0) & (Y < 230.0)
+            potato_skin = (R > 80.0) & (G > 60.0) & (B < R * 0.88) & (saturation > 0.12) & (Y > 30.0) & (Y < 230.0)
+            potato_rot = (Y > 18.0) & (Y < 75.0) & (R > 35.0)
+            foreground_mask = potato_skin | potato_rot
         else:
             foreground_mask = (saturation > 0.14) & (Y > 25.0) & (Y < 240.0)
 
         # -------------------------------------------------------------
         # STEP 4: MORPHOMETRIC SEGMENTATION USING SCIPY.NDIMAGE
         # -------------------------------------------------------------
-        # Clean morphological noise (specks, holes)
+        # Clean morphological noise (specks, holes) and fill interior holes (ensures internal rot is captured)
         cleaned_mask = ndi.binary_opening(foreground_mask, structure=np.ones((5, 5)))
         cleaned_mask = ndi.binary_closing(cleaned_mask, structure=np.ones((7, 7)))
+        cleaned_mask = ndi.binary_fill_holes(cleaned_mask)
 
         # Connected-components analysis
         labeled_array, num_features = ndi.label(cleaned_mask)
         slices = ndi.find_objects(labeled_array)
 
-        min_unit_pixels = total_pixels * 0.0015  # At least 0.15% of frame
-        max_unit_pixels = total_pixels * 0.90    # No more than 90%
+        min_unit_pixels = total_pixels * 0.0025  # At least 0.25% of frame
+        max_unit_pixels = total_pixels * 0.92    # No more than 92%
 
         valid_units = []
         bounding_boxes = []
@@ -385,11 +432,11 @@ class ProduceComputerVisionService:
             equiv_diam_px = 2.0 * np.sqrt(unit_area / np.pi)
             equiv_diam_mm = round(float(equiv_diam_px * baseline["pixel_scale_mm"]), 1)
 
-            # Clamp unit diameter to reasonable physical limits
+            # Clamp unit diameter to reasonable physical limits for this commodity
             clamped_diam_mm = float(np.clip(
                 equiv_diam_mm,
-                baseline["optimal_diameter_min"] * 0.4,
-                baseline["optimal_diameter_max"] * 1.6
+                baseline["optimal_diameter_min"] * 0.45,
+                baseline["optimal_diameter_max"] * 1.55
             ))
 
             valid_units.append({
@@ -460,6 +507,7 @@ class ProduceComputerVisionService:
         mean_G = float(np.mean(fg_G))
         mean_B = float(np.mean(fg_B))
         mean_Y = float(np.mean(fg_Y))
+        median_R = float(np.median(fg_R))
 
         # Real Pigmentation Score
         if baseline_key in ["onion", "tomato"]:
@@ -474,43 +522,95 @@ class ProduceComputerVisionService:
         else:
             pigmentation_score = 86.0
 
-        # Real Defect & Blemish Segmentation (rot, mold, holes, dark spots)
-        rot_mask = cleaned_mask & (Y < 46.0) & (saturation < 0.35)
-        rot_pixels = int(np.sum(rot_mask))
+        # -------------------------------------------------------------
+        # COMPREHENSIVE MULTI-SPECTRAL DEFECT, ROT & WRINKLE SEGMENTATION
+        # -------------------------------------------------------------
+        interior_mask = ndi.binary_erosion(cleaned_mask, structure=np.ones((7, 7)))
+        grad_Y = ndi.generic_gradient_magnitude(Y, ndi.sobel)
 
+        # 1. Dark Necrotic Rot & Anthracnose Lesions (Black / Deep brown rot)
+        if baseline_key == "tomato":
+            # For Tomato: Black rot, anthracnose, sunken dark lesions
+            rot_black = cleaned_mask & (R < 88.0) & (G < 52.0) & (B < 48.0)
+            rot_sunken = cleaned_mask & (R < median_R * 0.58) & (Y < 68.0)
+            # 2. Water-soaked soft rot & browning decay (loss of vibrant lycopene red)
+            rot_brown = cleaned_mask & (R < 125.0) & ((R - G) < 38.0) & (Y < 95.0) & (B < 85.0)
+            # 3. Severe skin wrinkling, folds, desiccation & shriveling
+            rot_wrinkles = interior_mask & (grad_Y > 15.0) & (R < 135.0)
+            deep_folds = interior_mask & (grad_Y > 22.0)
+            # 4. Dull fungal mold / mycelium
+            rot_mold = interior_mask & (saturation < 0.22) & (Y > 48.0) & (Y < 195.0)
+            defect_mask = (rot_black | rot_sunken | rot_brown | rot_wrinkles | deep_folds | rot_mold) & cleaned_mask
+            severe_rot_mask = (rot_black | rot_sunken | rot_brown) & cleaned_mask
+        elif baseline_key in ["onion", "potato"]:
+            # Dark rot, neck rot, scab, black heart
+            rot_black = cleaned_mask & (Y < 58.0) & (saturation < 0.45)
+            rot_decay = cleaned_mask & (Y < 72.0) & (abs(R - G) < 20.0)
+            rot_wrinkles = interior_mask & (grad_Y > 18.0) & (Y < 120.0)
+            rot_mold = interior_mask & (saturation < 0.18) & (Y > 45.0) & (Y < 185.0)
+            defect_mask = (rot_black | rot_decay | rot_wrinkles | rot_mold) & cleaned_mask
+            severe_rot_mask = (rot_black | rot_decay) & cleaned_mask
+        else:
+            # Grains, cotton, others
+            rot_black = cleaned_mask & (Y < 58.0)
+            rot_decay = cleaned_mask & (R < 70.0) & (G < 55.0)
+            rot_mold = interior_mask & (saturation < 0.15) & (Y > 60.0) & (Y < 180.0)
+            defect_mask = (rot_black | rot_decay | rot_mold) & cleaned_mask
+            severe_rot_mask = (rot_black | rot_decay) & cleaned_mask
+
+        # Sprout detection for Onion / Potato
         sprout_pixels = 0
         if baseline_key in ["onion", "potato"]:
-            # Sprout detection: Vivid green shoots sprouting from onion neck / potato eye
             sprout_mask = cleaned_mask & (G > R * 1.18) & (G > 55.0)
             sprout_pixels = int(np.sum(sprout_mask))
+            defect_mask = defect_mask | sprout_mask
 
-        total_defect_pixels = rot_pixels + sprout_pixels
-        blemish_percentage = float(round((total_defect_pixels / max(produce_pixel_count, 1)) * 100.0, 2))
+        total_defect_pixels = int(np.sum(defect_mask))
+        severe_rot_pixels = int(np.sum(severe_rot_mask))
+
+        blemish_percentage = float(round((total_defect_pixels / max(produce_pixel_count, 1)) * 100.0, 1))
+        rot_necrosis_percentage = float(round((severe_rot_pixels / max(produce_pixel_count, 1)) * 100.0, 1))
 
         # Real Specular Highlight Moisture Estimation
-        specular_mask = cleaned_mask & (Y > 218.0)
+        specular_mask = cleaned_mask & (Y > 218.0) & (saturation < 0.40)
         specular_ratio = float(np.sum(specular_mask)) / max(produce_pixel_count, 1)
         moisture_offset = (specular_ratio * 35.0) + (1.0 - mean_Y / 255.0) * 1.2
         estimated_moisture = float(round(np.clip(baseline["base_moisture"] + moisture_offset, 8.2, 16.8), 1))
 
         # Foreign Matter & Chaff estimate
-        chaff_estimate = float(round(np.clip((1.0 - coverage_ratio) * 1.5 + (rot_pixels / max(produce_pixel_count, 1)) * 8.0, 0.2, 3.8), 1))
+        chaff_estimate = float(round(np.clip((1.0 - coverage_ratio) * 1.5 + (severe_rot_pixels / max(produce_pixel_count, 1)) * 8.0, 0.2, 3.8), 1))
         broken_grain_estimate = float(round(np.clip(blemish_percentage * 0.35, 0.0, 4.5), 1))
 
         # -------------------------------------------------------------
         # STEP 6: STATUTORY APMC RULE 38 & AGMARKNET GRADE DECISION
         # -------------------------------------------------------------
         sprouting_detected = sprout_pixels > (produce_pixel_count * 0.012)
-        severe_rot = blemish_percentage > baseline["max_blemish_faq2"]
+        has_severe_active_rot = rot_necrosis_percentage >= 4.5 or blemish_percentage >= 15.0
+        has_moderate_defects = rot_necrosis_percentage >= 2.0 or blemish_percentage > baseline["max_blemish_faq2"]
         high_moisture = estimated_moisture > baseline["max_moisture_faq"]
 
-        if severe_rot or (sprouting_detected and baseline_key == "onion") or blemish_percentage > 9.5:
-            predicted_grade = "Grade C (Substandard / Processing Only)"
+        # Statutory APMC Rejection & Substandard Tiers:
+        # Rotten produce is strictly REJECTED or Grade C (Below FAQ) under APMC Rule 38
+        if has_severe_active_rot or (sprouting_detected and baseline_key == "onion"):
+            if rot_necrosis_percentage >= 7.0 or blemish_percentage >= 20.0:
+                predicted_grade = "REJECTED (Commercial Rejection / Rotten Produce - Below FAQ)"
+                grade_code = "C"
+                apmc_class = "NON_FAQ_REJECTED"
+                price_multiplier = 0.50
+                confidence_score = float(round(np.clip(94.0 + (blemish_percentage * 0.12), 92.0, 99.2), 1))
+            else:
+                predicted_grade = "Grade C (Substandard / Severe Defect - Below FAQ)"
+                grade_code = "C"
+                apmc_class = "NON_FAQ_SUBSTANDARD"
+                price_multiplier = 0.68
+                confidence_score = float(round(np.clip(92.0 + (blemish_percentage * 0.12), 90.0, 97.5), 1))
+        elif has_moderate_defects or high_moisture:
+            predicted_grade = "Grade C (Substandard / Distressed - Processing Only)"
             grade_code = "C"
             apmc_class = "NON_FAQ_SUBSTANDARD"
-            price_multiplier = 0.84
-            confidence_score = float(round(np.clip(93.0 + (blemish_percentage * 0.2), 91.0, 98.0), 1))
-        elif blemish_percentage <= baseline["max_blemish_faq1"] and uniformity_score >= 87.0 and not high_moisture:
+            price_multiplier = 0.82
+            confidence_score = float(round(np.clip(91.0 + (blemish_percentage * 0.15), 89.0, 96.0), 1))
+        elif blemish_percentage <= baseline["max_blemish_faq1"] and uniformity_score >= 87.0 and not high_moisture and rot_necrosis_percentage == 0.0:
             if uniformity_score >= 92.0 and blemish_percentage <= 1.5:
                 predicted_grade = "Grade A+ (Export / Super FAQ)"
                 grade_code = "A+"
@@ -520,40 +620,90 @@ class ProduceComputerVisionService:
                 grade_code = "A"
                 price_multiplier = 1.06
             apmc_class = "FAQ_GRADE_I"
-            confidence_score = float(round(np.clip(91.0 + (uniformity_score * 0.07), 92.0, 98.5), 1))
+            confidence_score = float(round(np.clip(92.0 + (uniformity_score * 0.06), 92.0, 98.5), 1))
         else:
-            predicted_grade = "Grade B (Domestic APMC Grade)"
+            # Domestic APMC Grade B: strictly for commercial produce with minor cosmetic marks (NO active rot)
+            predicted_grade = "Grade B (Domestic APMC Grade - FAQ II)"
             grade_code = "B"
             apmc_class = "FAQ_GRADE_II"
-            price_multiplier = 1.00
+            price_multiplier = 0.98
             confidence_score = float(round(np.clip(88.0 + (uniformity_score * 0.06), 87.0, 95.5), 1))
 
         # -------------------------------------------------------------
         # STEP 7: STATUTORY ADVISORY RECOMMENDATIONS
         # -------------------------------------------------------------
         recommendations = []
+        if auto_corrected:
+            recommendations.append(
+                f"⚠️ Specimen Standard Corrected: Optical sensor identified {commodity_name} produce "
+                f"while selection was set to {original_requested_comm}. Automatically applied statutory {commodity_name} AGMARKNET schedules."
+            )
+
         if grade_code in ["A", "A+"]:
             recommendations.append(f"Meets AGMARKNET Grade I statutory specifications for {commodity_name}.")
             recommendations.append(f"Optimal moisture ({estimated_moisture}%) guarantees safe storage up to 6 months in WDRA warehouses.")
             recommendations.append(f"Eligible for statutory premium of +{int((price_multiplier - 1.0) * 100)}% above modal APMC benchmark.")
         elif grade_code == "B":
             recommendations.append(f"Complies with APMC Rule 38 FAQ Grade II for domestic market distribution.")
-            recommendations.append(f"Minor blemish variance ({blemish_percentage}%); safe for 30-day ambient storage or immediate auction.")
+            recommendations.append(f"Minor superficial blemish variance ({blemish_percentage}%); no active rot detected. Safe for ambient auction.")
             recommendations.append("Trades at standard market modal equilibrium with no refraction deductions.")
         else:
-            recommendations.append(f"⚠️ QUALITY REFRACTION DETECTED: Blemish area {blemish_percentage}% exceeds statutory limit.")
-            if high_moisture:
-                recommendations.append(f"High moisture ({estimated_moisture}%) requires mandatory mechanical aeration or 2 days solar drying.")
-            if sprouting_detected:
-                recommendations.append("Active sprouting detected: recommend immediate liquidation to processing / dehydration plants.")
-            recommendations.append("Subject to statutory APMC refraction deduction of 12% to 18%.")
+            if has_severe_active_rot:
+                recommendations.append(
+                    f"🚫 STATUTORY APMC REJECTION: Active rot, necrotic lesions, or severe skin wrinkling/decay detected "
+                    f"({blemish_percentage}% defect area, {rot_necrosis_percentage}% severe rot). Produce is Below FAQ under APMC Rule 38."
+                )
+                recommendations.append("Unfit for standard APMC open outcry auction; distressed liquidation to food processing or salvage composting only.")
+                recommendations.append(f"Subject to severe statutory APMC refraction deduction of {int((1.0 - price_multiplier) * 100)}%.")
+            else:
+                recommendations.append(f"⚠️ QUALITY REFRACTION DETECTED: Blemish area {blemish_percentage}% exceeds statutory commercial limits.")
+                if high_moisture:
+                    recommendations.append(f"High moisture ({estimated_moisture}%) requires mandatory mechanical aeration or 2 days solar drying.")
+                if sprouting_detected:
+                    recommendations.append("Active sprouting detected: recommend immediate liquidation to processing / dehydration plants.")
+                recommendations.append(f"Subject to statutory APMC refraction deduction of {int((1.0 - price_multiplier) * 100)}%.")
 
         # -------------------------------------------------------------
-        # STEP 8: CRYPTOGRAPHIC HASH CERTIFICATE
+        # STEP 8: MORPHOMETRIC STATUS EVALUATION & CERTIFICATE HASH
         # -------------------------------------------------------------
         cert_seed = f"{commodity_name}-{measured_diameter_mm}-{estimated_moisture}-{start_time}-{len(image_bytes)}"
         sha256_hash = hashlib.sha256(cert_seed.encode("utf-8")).hexdigest()
         assay_id = f"QC-AGRO-2026-{sha256_hash[:8].upper()}"
+
+        # Rigorous morphometric threshold status checks
+        min_d = baseline["optimal_diameter_min"]
+        max_d = baseline["optimal_diameter_max"]
+        if min_d <= measured_diameter_mm <= max_d:
+            diam_status = "OPTIMAL"
+        elif (min_d * 0.82 <= measured_diameter_mm <= max_d * 1.18):
+            diam_status = "PASS"
+        elif measured_diameter_mm < min_d * 0.82:
+            diam_status = "UNDERSIZED"
+        else:
+            diam_status = "OVERSIZED"
+
+        if blemish_percentage <= baseline["max_blemish_faq1"]:
+            blem_status = "OPTIMAL"
+        elif blemish_percentage <= baseline["max_blemish_faq2"]:
+            blem_status = "PASS"
+        elif blemish_percentage <= 14.0:
+            blem_status = "HIGH DEFECT"
+        else:
+            blem_status = "SEVERE ROT"
+
+        if estimated_moisture <= baseline["base_moisture"]:
+            moist_status = "OPTIMAL"
+        elif estimated_moisture <= baseline["max_moisture_faq"]:
+            moist_status = "PASS"
+        else:
+            moist_status = "EXCESSIVE"
+
+        if uniformity_score >= 88.0:
+            unif_status = "OPTIMAL"
+        elif uniformity_score >= 75.0:
+            unif_status = "PASS"
+        else:
+            unif_status = "IRREGULAR"
 
         return {
             "status": "SUCCESS",
@@ -561,18 +711,21 @@ class ProduceComputerVisionService:
             "assay_id": assay_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "commodity": commodity_name,
-            "sample_name": f"{commodity_name} Live Specimen",
+            "sample_name": f"{commodity_name} Specimen" if not auto_corrected else f"{commodity_name} Specimen (Auto-Adjusted from {original_requested_comm})",
+            "commodity_auto_corrected": auto_corrected,
+            "original_commodity_requested": original_requested_comm,
             "predicted_grade": predicted_grade,
             "grade_code": grade_code,
             "confidence_score": confidence_score,
             "average_diameter_mm": measured_diameter_mm,
             "uniformity_score": uniformity_score,
             "blemish_percentage": blemish_percentage,
+            "rot_necrosis_percentage": rot_necrosis_percentage,
             "estimated_moisture_percent": estimated_moisture,
             "foreign_matter_percent": chaff_estimate,
             "broken_grain_percent": broken_grain_estimate,
             "apmc_grade_classification": apmc_class,
-            "sprouting_or_damage_detected": sprouting_detected or severe_rot,
+            "sprouting_or_damage_detected": sprouting_detected or has_severe_active_rot,
             "color_pigmentation_score": pigmentation_score,
             "codex_standards_compliant": grade_code in ["A", "A+"],
             "suggested_price_multiplier": price_multiplier,
@@ -584,25 +737,25 @@ class ProduceComputerVisionService:
                     "name": "Average Diameter",
                     "measured_value": f"{measured_diameter_mm} mm",
                     "benchmark_range": f"{baseline['optimal_diameter_min']} – {baseline['optimal_diameter_max']} mm",
-                    "status": "OPTIMAL" if (baseline["optimal_diameter_min"] <= measured_diameter_mm <= baseline["optimal_diameter_max"]) else "PASS"
+                    "status": diam_status
                 },
                 {
                     "name": "Size Uniformity Index",
                     "measured_value": f"{uniformity_score}%",
                     "benchmark_range": "> 85.0%",
-                    "status": "OPTIMAL" if uniformity_score >= 88.0 else ("PASS" if uniformity_score >= 75.0 else "DEFICIENT")
+                    "status": unif_status
                 },
                 {
                     "name": "Surface Blemish / Defect",
                     "measured_value": f"{blemish_percentage}%",
                     "benchmark_range": f"< {baseline['max_blemish_faq1']}%",
-                    "status": "OPTIMAL" if blemish_percentage <= baseline["max_blemish_faq1"] else ("PASS" if blemish_percentage <= baseline["max_blemish_faq2"] else "DEFICIENT")
+                    "status": blem_status
                 },
                 {
                     "name": "Moisture Index",
                     "measured_value": f"{estimated_moisture}%",
                     "benchmark_range": f"< {baseline['max_moisture_faq']}%",
-                    "status": "OPTIMAL" if estimated_moisture <= baseline["base_moisture"] else ("PASS" if estimated_moisture <= baseline["max_moisture_faq"] else "DEFICIENT")
+                    "status": moist_status
                 },
                 {
                     "name": "Chromatic Pigmentation",
