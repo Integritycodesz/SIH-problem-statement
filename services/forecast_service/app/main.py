@@ -37,7 +37,10 @@ class CustomForecastRequest(BaseModel):
     historical_arrivals_tonnes: Optional[List[float]] = None
     msp_benchmark_floor: Optional[float] = None
 
+@app.get("/")
+@app.get("/api")
 @app.get("/health")
+@app.get("/api/health")
 def health_check():
     return {
         "status": "HEALTHY",

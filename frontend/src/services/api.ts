@@ -138,6 +138,18 @@ export type {
   APMCJFormRecord
 };
 
+/**
+ * Resolves the base URL for the Python forecast microservice.
+ * In production (e.g. Vercel), it defaults to '' so requests use same-origin relative URLs (/api/...).
+ * In development, it defaults to 'http://127.0.0.1:8000' (or proxied /api).
+ */
+export const getForecastServiceUrl = (): string => {
+  const envUrl = import.meta.env.VITE_FORECAST_SERVICE_URL;
+  if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  return import.meta.env.PROD ? '' : 'http://127.0.0.1:8000';
+};
 
 export const MAHARASHTRA_VERIFIED_STORAGE_FACILITIES: StorageFacility[] = [
   {
@@ -3156,8 +3168,7 @@ export const api = {
     imageUriOrPresetId: string,
     commodity: string = 'Onion'
   ): Promise<AIQualityAssayResult> {
-    const FORECAST_SERVICE_URL =
-      import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
 
     let imageBase64: string | null = null;
 
@@ -4976,7 +4987,7 @@ export const api = {
     spot_price?: number;
     msp?: number;
   }): Promise<any> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const query = new URLSearchParams({
         mandi: params.mandi || 'Lasalgaon APMC',
@@ -5003,7 +5014,7 @@ export const api = {
     current_price?: number;
     previous_price?: number;
   }): Promise<any> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const query = new URLSearchParams({
         mandi: params.mandi || 'Lasalgaon APMC',
@@ -5023,7 +5034,7 @@ export const api = {
   },
 
   async getDGFTPolicies(): Promise<any> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const res = await fetch(`${FORECAST_SERVICE_URL}/api/trade-policy/dgft`);
       if (res.ok) {
@@ -5034,7 +5045,7 @@ export const api = {
   },
 
   async getIMDDistrictWeather(district: string): Promise<any> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const res = await fetch(`${FORECAST_SERVICE_URL}/api/weather/imd/${encodeURIComponent(district)}`);
       if (res.ok) {
@@ -5051,7 +5062,7 @@ export const api = {
     spot_price?: number;
     msp?: number;
   }): Promise<EnsembleForecastResponse | null> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const query = new URLSearchParams({
         commodity: params.commodity,
@@ -5077,7 +5088,7 @@ export const api = {
     district?: string;
     spot_price?: number;
   }): Promise<SpatialClusterResult | null> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const query = new URLSearchParams({
         commodity: params.commodity,
@@ -5097,7 +5108,7 @@ export const api = {
     commodity: string;
     spot_price?: number;
   }): Promise<NCDEXMarketCurveResponse | null> {
-    const FORECAST_SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL || 'http://127.0.0.1:8000';
+    const FORECAST_SERVICE_URL = getForecastServiceUrl();
     try {
       const query = new URLSearchParams({
         commodity: params.commodity,

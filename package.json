@@ -2,9 +2,12 @@
   "name": "sih-problem-statement-root",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
     "dev": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
+    "build": "cd frontend && npm install && npm run build",
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview"
   }
