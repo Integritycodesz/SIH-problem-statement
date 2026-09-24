@@ -19,10 +19,10 @@ app = FastAPI(
     description="Institutional-grade Agricultural Time-Series Forecasting Microservice fusing SARIMAX + Facebook Prophet with IMD Weather, Arrival Elasticity (Ed), and DGFT Trade Policies."
 )
 
-# Enable CORS for Vite frontend
+# Enable CORS for Vite frontend (including Vercel preview deployments)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
