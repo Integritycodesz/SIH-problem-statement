@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: agroconnect-forecast-service
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_service.py
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: SUPABASE_URL
+        value: https://rzppmfkltvgcejyiwufr.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6cHBtZmtsdHZnY2VqeWl3dWZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMTI5NDksImV4cCI6MjEwNDU4ODk0OX0.svPL0mG7h6S-WzYvGuJkalhpj-zJzwBPYknXtHCVl8s
+      - key: AGMARKNET_API_KEY
+        value: 579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b

@@ -37,8 +37,10 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Backend services (managed in 'backend' branch & deployed on Render)
-/backend/
-/services/
-render.yaml
-start_forecast_service.bat
+# Python virtual environment & cache
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
