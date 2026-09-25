@@ -3,7 +3,11 @@ echo ====================================================================
 echo Starting AgroConnect SARIMAX + Prophet Forecasting Microservice...
 echo ====================================================================
 
-cd /d "%~dp0\services\forecast_service"
+if exist "%~dp0backend" (
+    cd /d "%~dp0backend"
+) else (
+    cd /d "%~dp0services\forecast_service"
+)
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] Virtual environment not found. Creating .venv...
     python -m venv .venv

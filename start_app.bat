@@ -4,7 +4,8 @@ echo   Starting AgroConnect Platform (SIH 2026)
 echo ===================================================
 
 REM 1. Start Python SARIMAX + CV Forecast Microservice
-set FORECAST_DIR=%~dp0services\forecast_service
+set FORECAST_DIR=%~dp0backend
+if not exist "%FORECAST_DIR%" set FORECAST_DIR=%~dp0services\forecast_service
 if exist "%FORECAST_DIR%\.venv\Scripts\python.exe" (
     echo Starting Forecast ^& AI Assay Microservice on http://127.0.0.1:8000 ...
     start "AgroConnect Forecast Service (Port 8000)" cmd /c "cd /d \"%FORECAST_DIR%\" && .venv\Scripts\python.exe run_service.py"
@@ -13,7 +14,7 @@ if exist "%FORECAST_DIR%\.venv\Scripts\python.exe" (
 )
 
 REM 2. Start Frontend
-cd /d "%~dp0frontend"
+cd /d "%~dp0"
 if not exist node_modules (
     echo Installing frontend dependencies...
     call npm install

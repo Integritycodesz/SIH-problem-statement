@@ -38,6 +38,7 @@ Thumbs.db
 *.sw?
 
 # Backend services (managed in 'backend' branch & deployed on Render)
+/backend/
 /services/
 render.yaml
 start_forecast_service.bat
