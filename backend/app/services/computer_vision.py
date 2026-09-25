@@ -3,8 +3,78 @@ import time
 import hashlib
 from typing import Dict, Any, List, Optional
 import numpy as np
-from PIL import Image
-from scipy import ndimage as ndi
+from PIL import Image, ImageFilter
+try:
+    from scipy import ndimage as ndi
+    HAS_SCIPY = True
+except ImportError:
+    ndi = None
+    HAS_SCIPY = False
+
+def _binary_open(mask: np.ndarray, size: int = 5) -> np.ndarray:
+    if HAS_SCIPY and ndi is not None:
+        return ndi.binary_opening(mask, structure=np.ones((size, size)))
+    img = Image.fromarray((mask * 255).astype(np.uint8))
+    eroded = img.filter(ImageFilter.MinFilter(size))
+    opened = eroded.filter(ImageFilter.MaxFilter(size))
+    return np.array(opened) > 128
+
+def _binary_close(mask: np.ndarray, size: int = 7) -> np.ndarray:
+    if HAS_SCIPY and ndi is not None:
+        return ndi.binary_closing(mask, structure=np.ones((size, size)))
+    img = Image.fromarray((mask * 255).astype(np.uint8))
+    dilated = img.filter(ImageFilter.MaxFilter(size))
+    closed = dilated.filter(ImageFilter.MinFilter(size))
+    return np.array(closed) > 128
+
+def _binary_erosion(mask: np.ndarray, size: int = 7) -> np.ndarray:
+    if HAS_SCIPY and ndi is not None:
+        return ndi.binary_erosion(mask, structure=np.ones((size, size)))
+    img = Image.fromarray((mask * 255).astype(np.uint8))
+    eroded = img.filter(ImageFilter.MinFilter(size))
+    return np.array(eroded) > 128
+
+def _binary_fill_holes(mask: np.ndarray) -> np.ndarray:
+    if HAS_SCIPY and ndi is not None:
+        return ndi.binary_fill_holes(mask)
+    return mask
+
+def _calc_gradient_magnitude(Y: np.ndarray) -> np.ndarray:
+    if HAS_SCIPY and ndi is not None:
+        return ndi.generic_gradient_magnitude(Y, ndi.sobel)
+    gy, gx = np.gradient(Y.astype(float))
+    return np.hypot(gy, gx)
+
+def _label_and_slices(mask: np.ndarray):
+    if HAS_SCIPY and ndi is not None:
+        labeled, num = ndi.label(mask)
+        return labeled, num, ndi.find_objects(labeled)
+    labeled = np.zeros_like(mask, dtype=int)
+    h, w = mask.shape
+    cur = 0
+    slices = []
+    step = 2 if (h * w > 400000) else 1
+    for r in range(0, h, step):
+        for c in range(0, w, step):
+            if mask[r, c] and labeled[r, c] == 0:
+                cur += 1
+                queue = [(r, c)]
+                labeled[r, c] = cur
+                min_r, max_r, min_c, max_c = r, r, c, c
+                while queue:
+                    cr, cc = queue.pop()
+                    if cr < min_r: min_r = cr
+                    if cr > max_r: max_r = cr
+                    if cc < min_c: min_c = cc
+                    if cc > max_c: max_c = cc
+                    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                        nr, nc = cr + dr, cc + dc
+                        if 0 <= nr < h and 0 <= nc < w:
+                            if mask[nr, nc] and labeled[nr, nc] == 0:
+                                labeled[nr, nc] = cur
+                                queue.append((nr, nc))
+                slices.append((slice(min_r, max_r + 1), slice(min_c, max_c + 1)))
+    return labeled, cur, slices
 
 class ProduceComputerVisionService:
     """
@@ -400,13 +470,12 @@ class ProduceComputerVisionService:
         # STEP 4: MORPHOMETRIC SEGMENTATION USING SCIPY.NDIMAGE
         # -------------------------------------------------------------
         # Clean morphological noise (specks, holes) and fill interior holes (ensures internal rot is captured)
-        cleaned_mask = ndi.binary_opening(foreground_mask, structure=np.ones((5, 5)))
-        cleaned_mask = ndi.binary_closing(cleaned_mask, structure=np.ones((7, 7)))
-        cleaned_mask = ndi.binary_fill_holes(cleaned_mask)
+        cleaned_mask = _binary_open(foreground_mask, 5)
+        cleaned_mask = _binary_close(cleaned_mask, 7)
+        cleaned_mask = _binary_fill_holes(cleaned_mask)
 
         # Connected-components analysis
-        labeled_array, num_features = ndi.label(cleaned_mask)
-        slices = ndi.find_objects(labeled_array)
+        labeled_array, num_features, slices = _label_and_slices(cleaned_mask)
 
         min_unit_pixels = total_pixels * 0.0025  # At least 0.25% of frame
         max_unit_pixels = total_pixels * 0.92    # No more than 92%
@@ -525,8 +594,8 @@ class ProduceComputerVisionService:
         # -------------------------------------------------------------
         # COMPREHENSIVE MULTI-SPECTRAL DEFECT, ROT & WRINKLE SEGMENTATION
         # -------------------------------------------------------------
-        interior_mask = ndi.binary_erosion(cleaned_mask, structure=np.ones((7, 7)))
-        grad_Y = ndi.generic_gradient_magnitude(Y, ndi.sobel)
+        interior_mask = _binary_erosion(cleaned_mask, 7)
+        grad_Y = _calc_gradient_magnitude(Y)
 
         # 1. Dark Necrotic Rot & Anthracnose Lesions (Black / Deep brown rot)
         if baseline_key == "tomato":
